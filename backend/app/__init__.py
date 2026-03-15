@@ -1,0 +1,1 @@
+"""Food Roulette Backend Application"""
