@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.database.engine import engine
 from app.database.base import Base
+from app.routes import auth, recipes, favorites, ratings, shopping, history, weekly
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -43,7 +44,41 @@ async def health_check():
     return {"status": "healthy"}
 
 
-# TODO: Import and include routers here
-# from app.routes import users, recipes, favorites, ratings, shopping, weekly_plan
-# app.include_router(users.router, prefix=settings.API_V1_STR + "/users", tags=["users"])
-# app.include_router(recipes.router, prefix=settings.API_V1_STR + "/recipes", tags=["recipes"])
+# Include all routers
+api_v1_prefix = settings.API_V1_STR
+
+app.include_router(
+    auth.router,
+    prefix=api_v1_prefix,
+    tags=["auth"]
+)
+app.include_router(
+    recipes.router,
+    prefix=api_v1_prefix,
+    tags=["recipes"]
+)
+app.include_router(
+    favorites.router,
+    prefix=api_v1_prefix,
+    tags=["favorites"]
+)
+app.include_router(
+    ratings.router,
+    prefix=api_v1_prefix,
+    tags=["ratings"]
+)
+app.include_router(
+    shopping.router,
+    prefix=api_v1_prefix,
+    tags=["shopping"]
+)
+app.include_router(
+    history.router,
+    prefix=api_v1_prefix,
+    tags=["history"]
+)
+app.include_router(
+    weekly.router,
+    prefix=api_v1_prefix,
+    tags=["weekly-menu"]
+)

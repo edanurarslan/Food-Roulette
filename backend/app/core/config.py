@@ -7,7 +7,16 @@ class Settings(BaseSettings):
     """Application settings from environment variables"""
     
     # Database
-    DATABASE_URL: str = "postgresql://user:password@localhost:5432/food_roulette_db"
+    POSTGRES_USER: str = "food_user"
+    POSTGRES_PASSWORD: str = "your_secure_password"
+    POSTGRES_DB: str = "food_roulette_db"
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    
+    # Computed DATABASE_URL
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
     # FastAPI
     ENVIRONMENT: str = "development"
@@ -23,6 +32,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "allow"
 
 
 @lru_cache()
