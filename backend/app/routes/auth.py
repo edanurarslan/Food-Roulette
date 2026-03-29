@@ -52,11 +52,13 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
     """
     Login user and get access token
     
-    - **username**: username
+    - **username**: username or email
     - **password**: password
     """
-    # Find user by username
-    user = db.query(User).filter(User.username == credentials.username).first()
+    # Find user by username or email
+    user = db.query(User).filter(
+        (User.username == credentials.username) | (User.email == credentials.username)
+    ).first()
     
     if not user or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(
