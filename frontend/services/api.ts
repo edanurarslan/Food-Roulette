@@ -248,6 +248,36 @@ class ApiService {
     const response = await this.api.delete(`/weekly-menu/${weekStartDate}`);
     return response.status === 204;
   }
+
+  // User Endpoints
+  async getProfile() {
+    const response = await this.api.get('/users/profile');
+    return response.data;
+  }
+
+  async updateProfile(username?: string, bio?: string, profileImageUrl?: string) {
+    const updateData: any = {};
+    if (username) updateData.username = username;
+    if (bio !== undefined) updateData.bio = bio;
+    if (profileImageUrl) updateData.profile_image_url = profileImageUrl;
+
+    const response = await this.api.put('/users/profile', updateData);
+    return response.data;
+  }
+
+  async changePassword(oldPassword: string, newPassword: string, confirmPassword: string) {
+    const response = await this.api.post('/users/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    });
+    return response.data;
+  }
+
+  async deleteAccount() {
+    const response = await this.api.delete('/users/account');
+    return response.data;
+  }
 }
 
 export const apiService = new ApiService();

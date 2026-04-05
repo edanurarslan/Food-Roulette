@@ -28,6 +28,13 @@ class UserUpdate(BaseModel):
     bio: Optional[str] = None
 
 
+class PasswordUpdate(BaseModel):
+    """Password update schema"""
+    old_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=8)
+    confirm_password: str = Field(..., min_length=8)
+
+
 class UserResponse(BaseModel):
     """User response schema"""
     id: UUID

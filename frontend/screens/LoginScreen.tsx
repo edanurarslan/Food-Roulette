@@ -3,7 +3,7 @@
  * Tasarım: Front Örnek Projesinin Birebir Aynısı
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [emailFocus, setEmailFocus] = useState(false);
   const [passwordFocus, setPasswordFocus] = useState(false);
-  const fadeAnim = new Animated.Value(0);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   
   const { login } = useAuth();
 
@@ -43,7 +43,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, [fadeAnim]);
+  }, []);
 
   const handleLogin = async () => {
     // Validation

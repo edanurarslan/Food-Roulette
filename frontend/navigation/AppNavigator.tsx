@@ -6,17 +6,18 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { ProfileScreen } from '../screens/ProfileScreen';
-
-// Screens (Placeholder'lar şimdilik - daha sonra oluşturulacak)
-const HomeScreen = () => (
-  <PlaceholderScreen title="🏠 Anasayfa" />
-);
-
-const RecipesScreen = () => (
-  <PlaceholderScreen title="📖 Tarifler" />
-);
+import { HomeScreen } from '../screens/HomeScreen';
+import { RecipeDetailScreen } from '../screens/RecipeDetailScreen';
+import { EditProfileScreen } from '../screens/EditProfileScreen';
+import { ChangePasswordScreen } from '../screens/ChangePasswordScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { TermsScreen } from '../screens/TermsScreen';
+import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
+import { AboutScreen } from '../screens/AboutScreen';
+import { RecipesScreen } from '../screens/RecipesScreen';
 
 const FavoritesScreen = () => (
   <PlaceholderScreen title="❤️ Favoriler" />
@@ -25,9 +26,6 @@ const FavoritesScreen = () => (
 const ShoppingScreen = () => (
   <PlaceholderScreen title="🛒 Alışveriş" />
 );
-
-// Placeholder Component
-import { View, Text } from 'react-native';
 
 const PlaceholderScreen = ({ title }: { title: string }) => (
   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -44,51 +42,85 @@ const ShoppingStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Stack Screens
+// Stack Options with Fade Transition
+const stackScreenOptions = {
+  headerStyle: { backgroundColor: '#10B981' },
+  headerTintColor: '#fff',
+  headerTitleStyle: { fontWeight: '700' as const, fontSize: 18 },
+  animationEnabled: true,
+  animationTypeForReplace: 'pop' as const,
+};
+
+// Stack Screens with Animation Wrapper
 function HomeStackScreen() {
-  return (
+  const [isFocused, setIsFocused] = React.useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
+  );
+
+  return isFocused ? (
     <HomeStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: '#10B981' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '700', fontSize: 18 },
-      }}
+      screenOptions={stackScreenOptions}
     >
       <HomeStack.Screen
         name="HomeMain"
         component={HomeScreen}
         options={{ title: 'Anasayfa' }}
       />
+      <HomeStack.Screen
+        name="RecipeDetail"
+        component={RecipeDetailScreen}
+        options={{ title: 'Tarif Detayları' }}
+      />
     </HomeStack.Navigator>
-  );
+  ) : null;
 }
 
 function RecipesStackScreen() {
-  return (
+  const [isFocused, setIsFocused] = React.useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
+  );
+
+  return isFocused ? (
     <RecipesStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: '#10B981' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '700', fontSize: 18 },
-      }}
+      screenOptions={stackScreenOptions}
     >
       <RecipesStack.Screen
         name="RecipesMain"
         component={RecipesScreen}
         options={{ title: 'Tarifler' }}
       />
+      <RecipesStack.Screen
+        name="RecipeDetail"
+        component={RecipeDetailScreen}
+        options={{ title: 'Tarif Detayları' }}
+      />
     </RecipesStack.Navigator>
-  );
+  ) : null;
 }
 
 function FavoritesStackScreen() {
-  return (
+  const [isFocused, setIsFocused] = React.useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
+  );
+
+  return isFocused ? (
     <FavoritesStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: '#10B981' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '700', fontSize: 18 },
-      }}
+      screenOptions={stackScreenOptions}
     >
       <FavoritesStack.Screen
         name="FavoritesMain"
@@ -96,17 +128,22 @@ function FavoritesStackScreen() {
         options={{ title: 'Favoriler' }}
       />
     </FavoritesStack.Navigator>
-  );
+  ) : null;
 }
 
 function ShoppingStackScreen() {
-  return (
+  const [isFocused, setIsFocused] = React.useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
+  );
+
+  return isFocused ? (
     <ShoppingStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: '#10B981' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '700', fontSize: 18 },
-      }}
+      screenOptions={stackScreenOptions}
     >
       <ShoppingStack.Screen
         name="ShoppingMain"
@@ -114,26 +151,60 @@ function ShoppingStackScreen() {
         options={{ title: 'Alışveriş Listesi' }}
       />
     </ShoppingStack.Navigator>
-  );
+  ) : null;
 }
 
 function ProfileStackScreen() {
-  return (
+  const [isFocused, setIsFocused] = React.useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
+  );
+
+  return isFocused ? (
     <ProfileStack.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: '#10B981' },
-        headerTintColor: '#fff',
-        headerTitleStyle: { fontWeight: '700', fontSize: 18 },
-      }}
+      screenOptions={stackScreenOptions}
     >
       <ProfileStack.Screen
         name="ProfileMain"
         component={ProfileScreen}
         options={{ title: 'Profil' }}
       />
+      <ProfileStack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{ title: 'Profili Düzenle' }}
+      />
+      <ProfileStack.Screen
+        name="ChangePassword"
+        component={ChangePasswordScreen}
+        options={{ title: 'Şifre Değiştir' }}
+      />
+      <ProfileStack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: 'Bildirim Ayarları' }}
+      />
+      <ProfileStack.Screen
+        name="Terms"
+        component={TermsScreen}
+        options={{ title: 'Kullanım Şartları' }}
+      />
+      <ProfileStack.Screen
+        name="PrivacyPolicy"
+        component={PrivacyPolicyScreen}
+        options={{ title: 'Gizlilik Politikası' }}
+      />
+      <ProfileStack.Screen
+        name="About"
+        component={AboutScreen}
+        options={{ title: 'Uygulama Hakkında' }}
+      />
     </ProfileStack.Navigator>
-  );
+  ) : null;
 }
 
 // Main Bottom Tab Navigator
@@ -162,6 +233,8 @@ export const AppNavigator: React.FC = () => {
           marginTop: 6,
           letterSpacing: 0.2,
         },
+        // Her tab geçişinde animasyon tetiklensin diye lazy rendering deaktif et
+        lazy: false,
       }}
     >
       <Tab.Screen

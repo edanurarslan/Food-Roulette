@@ -9,12 +9,12 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-# Password hashing with argon2
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+# Password hashing with argon2, fallback to bcrypt
+pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
-    """Hash a password with argon2"""
+    """Hash a password with argon2 (or bcrypt if needed)"""
     return pwd_context.hash(password)
 
 

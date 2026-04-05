@@ -2,7 +2,7 @@
  * RegisterScreen - Kullanıcı Kayıt Ekranı
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -38,7 +38,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [emailFocus, setEmailFocus] = useState(false);
   const [passwordFocus, setPasswordFocus] = useState(false);
   const [confirmPasswordFocus, setConfirmPasswordFocus] = useState(false);
-  const fadeAnim = new Animated.Value(0);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const { register } = useAuth();
 
@@ -48,7 +48,7 @@ export const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, [fadeAnim]);
+  }, []);
 
   const handleRegister = async () => {
     // Validation

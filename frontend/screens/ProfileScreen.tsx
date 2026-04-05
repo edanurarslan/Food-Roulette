@@ -2,7 +2,7 @@
  * ProfileScreen - Kullanıcı Profil Ekranı
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,12 @@ import { useAuth } from '../contexts/AuthContext';
 
 type RootStackParamList = {
   ProfileMain: undefined;
+  EditProfile: undefined;
+  ChangePassword: undefined;
+  Notifications: undefined;
+  Terms: undefined;
+  PrivacyPolicy: undefined;
+  About: undefined;
 };
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ProfileMain'>;
@@ -28,7 +34,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { user, logout } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const fadeAnim = new Animated.Value(0);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -36,7 +42,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, [fadeAnim]);
+  }, []);
 
   const handleLogout = () => {
     setShowLogoutConfirm(true);
@@ -53,6 +59,31 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       setLoading(false);
       setShowLogoutConfirm(false);
     }
+  };
+
+  // Buton işlemleri
+  const handleEditProfile = () => {
+    navigation.navigate('EditProfile');
+  };
+
+  const handleChangePassword = () => {
+    navigation.navigate('ChangePassword');
+  };
+
+  const handleNotifications = () => {
+    navigation.navigate('Notifications');
+  };
+
+  const handleTermsOfService = () => {
+    navigation.navigate('Terms');
+  };
+
+  const handlePrivacyPolicy = () => {
+    navigation.navigate('PrivacyPolicy');
+  };
+
+  const handleAboutApp = () => {
+    navigation.navigate('About');
   };
 
   if (!user) {
@@ -133,17 +164,29 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.sectionTitle}>Hesap Ayarları</Text>
 
         {/* Edit Profile Button */}
-        <TouchableOpacity style={styles.settingButton} disabled={loading}>
+        <TouchableOpacity 
+          style={styles.settingButton} 
+          disabled={loading}
+          onPress={handleEditProfile}
+        >
           <Text style={styles.settingButtonText}>✏️ Profili Düzenle</Text>
         </TouchableOpacity>
 
         {/* Change Password Button */}
-        <TouchableOpacity style={styles.settingButton} disabled={loading}>
+        <TouchableOpacity 
+          style={styles.settingButton} 
+          disabled={loading}
+          onPress={handleChangePassword}
+        >
           <Text style={styles.settingButtonText}>🔐 Şifreyi Değiştir</Text>
         </TouchableOpacity>
 
         {/* Notifications Button */}
-        <TouchableOpacity style={styles.settingButton} disabled={loading}>
+        <TouchableOpacity 
+          style={styles.settingButton} 
+          disabled={loading}
+          onPress={handleNotifications}
+        >
           <Text style={styles.settingButtonText}>🔔 Bildirimler</Text>
         </TouchableOpacity>
       </View>
@@ -152,15 +195,24 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.aboutSection}>
         <Text style={styles.sectionTitle}>Hakkında</Text>
 
-        <TouchableOpacity style={styles.aboutButton}>
+        <TouchableOpacity 
+          style={styles.aboutButton}
+          onPress={handleTermsOfService}
+        >
           <Text style={styles.aboutButtonText}>📋 Kullanım Şartları</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.aboutButton}>
+        <TouchableOpacity 
+          style={styles.aboutButton}
+          onPress={handlePrivacyPolicy}
+        >
           <Text style={styles.aboutButtonText}>🔒 Gizlilik Politikası</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.aboutButton}>
+        <TouchableOpacity 
+          style={styles.aboutButton}
+          onPress={handleAboutApp}
+        >
           <Text style={styles.aboutButtonText}>ℹ️ Uygulama Hakkında</Text>
         </TouchableOpacity>
 

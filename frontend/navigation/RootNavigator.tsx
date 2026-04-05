@@ -53,6 +53,7 @@ export const AuthNavigator: React.FC = () => {
     <AuthStack.Navigator
       screenOptions={{
         headerShown: false,
+        animationTypeForReplace: 'pop' as const,
       }}
       initialRouteName="Login"
     >
@@ -60,7 +61,6 @@ export const AuthNavigator: React.FC = () => {
         name="Login" 
         component={LoginScreen}
         options={{
-          animationTypeForReplace: 'pop',
           gestureEnabled: false,
         }}
       />
@@ -68,7 +68,6 @@ export const AuthNavigator: React.FC = () => {
         name="Register" 
         component={RegisterScreen}
         options={{
-          animationTypeForReplace: 'pop',
           gestureEnabled: true,
         }}
       />
