@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from '../services/api';
 
 type RootStackParamList = {
@@ -65,8 +66,9 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const heartAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Fetch recipe from API
+    // Fetch recipe from API and track viewing history
     loadRecipeDetails();
+    trackHistory(parseInt(recipeId as string));
     
     // Screen fade-in
     Animated.timing(fadeAnim, {
@@ -75,6 +77,38 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       useNativeDriver: true,
     }).start();
   }, [recipeId]);
+
+  const trackHistory = async (recipeId: number) => {
+    try {
+      // Get current history from LocalStorage
+      const historyData = await AsyncStorage.getItem('history');
+      const history = historyData ? JSON.parse(historyData) : [];
+
+      // Check if recipe already in history
+      const existingIndex = history.findIndex((h: any) => h.recipeId === recipeId);
+      
+      if (existingIndex !== -1) {
+        // Move to top and increment view count
+        const item = history.splice(existingIndex, 1)[0];
+        item.viewedAt = Date.now();
+        item.viewCount = (item.viewCount || 1) + 1;
+        history.unshift(item);
+      } else {
+        // Add new item
+        history.unshift({
+          recipeId,
+          viewedAt: Date.now(),
+          viewCount: 1,
+        });
+      }
+
+      // Keep only last 20 items
+      const maxItems = history.slice(0, 20);
+      await AsyncStorage.setItem('history', JSON.stringify(maxItems));
+    } catch (error) {
+      console.error('Tarih kaydedilirken hata:', error);
+    }
+  };
 
   const loadRecipeDetails = async () => {
     try {

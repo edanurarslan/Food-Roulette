@@ -1,6 +1,7 @@
 /**
  * RecipesScreen - Tarifler Sayfası
- * Tüm tarifler grid/list şeklinde, arama ve filtreler
+ * 4-Level Filtering System: Malzeme → Kategori → Mood → Arama
+ * LocalStorage Integration für Favorites & History
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -14,9 +15,12 @@ import {
   ActivityIndicator,
   FlatList,
   TextInput,
+  Modal,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from '../services/api';
 
 type RootStackParamList = {
@@ -38,22 +42,42 @@ interface Recipe {
   difficulty?: string;
   servings?: number;
   calories?: number;
+  fat?: number;
+}
+
+interface FilterState {
+  ingredients: string[];
+  category: string;
+  mood: string | null;
+  searchQuery: string;
 }
 
 const emojis = ['🍕', '🍝', '🍜', '🍲', '🌮', '🍱', '🥘', '🍛', '🥗', '🍗', '🍖', '🥩'];
+const moodOptions = [
+  { label: 'Hızlı', icon: '⚡', maxTime: 20 },
+  { label: 'Tok', icon: '🍖', minCalories: 350 },
+  { label: 'Hafif', icon: '🥗', maxCalories: 250 },
+  { label: 'Sağlıklı', icon: '💚', maxFat: 15 },
+];
 
 export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [favorites, setFavorites] = useState<number[]>([]);
 
+  // Filter States - Level 1 to 4
+  const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const categories = ['Tümü', 'Çorba', 'Ana Yemek', 'Kahvaltı', 'Ara Öğün', 'Yan Yemek'];
 
   useEffect(() => {
-    loadRecipes();
+    loadRecipesAndFavorites();
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
@@ -62,14 +86,15 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
-    applyFilters();
-  }, [searchQuery, selectedCategory, recipes]);
+    applyMultiLevelFilters();
+  }, [selectedIngredients, selectedCategory, selectedMood, searchQuery, recipes]);
 
-  const loadRecipes = async () => {
+  const loadRecipesAndFavorites = async () => {
     try {
       setLoading(true);
+      
+      // Load recipes from API
       const response = await apiService.getRecipes(undefined, undefined, 0, 50);
-
       if (response && Array.isArray(response)) {
         const recipesWithEmoji = response.map((recipe: any, index: number) => ({
           ...recipe,
@@ -77,34 +102,89 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
         }));
         setRecipes(recipesWithEmoji);
       }
+
+      // Load favorites from LocalStorage
+      const favs = await AsyncStorage.getItem('favorites');
+      if (favs) {
+        setFavorites(JSON.parse(favs));
+      }
     } catch (error) {
       console.error('Tarifler yüklenirken hata:', error);
       setRecipes([
-        { id: 1, name: 'Pasta', emoji: '🍝', category: 'Ana Yemek', instructions: [], ingredients: ['Pasta', 'Sos'], cook_time: 20, difficulty: 'Kolay' },
-        { id: 2, name: 'Çorba', emoji: '🍲', category: 'Çorba', instructions: [], ingredients: ['Su', 'Sebze'], cook_time: 30, difficulty: 'Kolay' },
-        { id: 3, name: 'Salata', emoji: '🥗', category: 'Yan Yemek', instructions: [], ingredients: ['Sebze', 'Zeytin yağı'], cook_time: 10, difficulty: 'Kolay' },
+        { id: 1, name: 'Tavuk Pilav', emoji: '�', category: 'Ana Yemek', instructions: [], ingredients: ['Tavuk', 'Pirinç'], cook_time: 25, difficulty: 'Kolay', calories: 420, fat: 8 },
+        { id: 2, name: 'Sebze Çorbası', emoji: '🍲', category: 'Çorba', instructions: [], ingredients: ['Sebze', 'Su'], cook_time: 20, difficulty: 'Kolay', calories: 120, fat: 2 },
+        { id: 3, name: 'Salatà Yeşil', emoji: '🥗', category: 'Yan Yemek', instructions: [], ingredients: ['Marul', 'Domates'], cook_time: 5, difficulty: 'Kolay', calories: 80, fat: 3 },
       ]);
     } finally {
       setLoading(false);
     }
   };
 
-  const applyFilters = () => {
-    let filtered = recipes;
+  // LEVEL 1: Malzeme Filtresi
+  const getIngredientsFromRecipes = () => {
+    const allIngredients = new Set<string>();
+    recipes.forEach(r => {
+      if (Array.isArray(r.ingredients)) {
+        r.ingredients.forEach(ing => allIngredients.add(ing.trim()));
+      }
+    });
+    return Array.from(allIngredients).sort();
+  };
 
-    // Search filter
-    if (searchQuery.trim()) {
-      filtered = filtered.filter(r =>
-        r.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
+  const matchesIngredients = (recipe: Recipe): boolean => {
+    if (selectedIngredients.length === 0) return true;
+    
+    const recipeIngredientsLower = recipe.ingredients.map(i => i.toLowerCase());
+    return selectedIngredients.some(ingredient => 
+      recipeIngredientsLower.some(recIng => recIng.includes(ingredient.toLowerCase()))
+    );
+  };
 
-    // Category filter
-    if (selectedCategory !== 'Tümü') {
-      filtered = filtered.filter(r =>
-        r.category?.toLowerCase().includes(selectedCategory.toLowerCase())
-      );
+  // LEVEL 2: Kategori Filtresi
+  const matchesCategory = (recipe: Recipe): boolean => {
+    if (selectedCategory === 'Tümü') return true;
+    return recipe.category?.toLowerCase() === selectedCategory.toLowerCase();
+  };
+
+  // LEVEL 3: Mood Filtresi
+  const matchesMood = (recipe: Recipe): boolean => {
+    if (!selectedMood) return true;
+    
+    const mood = moodOptions.find(m => m.label === selectedMood);
+    if (!mood) return true;
+
+    if (selectedMood === 'Hızlı') {
+      return (recipe.cook_time || 0) <= mood.maxTime!;
     }
+    if (selectedMood === 'Tok') {
+      return (recipe.calories || 0) >= mood.minCalories!;
+    }
+    if (selectedMood === 'Hafif') {
+      return (recipe.calories || 0) < mood.maxCalories!;
+    }
+    if (selectedMood === 'Sağlıklı') {
+      return (recipe.fat || 0) < mood.maxFat!;
+    }
+    return true;
+  };
+
+  // LEVEL 4: Arama Filtresi
+  const matchesSearch = (recipe: Recipe): boolean => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      recipe.name.toLowerCase().includes(query) ||
+      (recipe.ingredients?.some(ing => ing.toLowerCase().includes(query)) ?? false)
+    );
+  };
+
+  // Apply all 4 levels of filters
+  const applyMultiLevelFilters = () => {
+    let filtered = recipes
+      .filter(r => matchesIngredients(r))
+      .filter(r => matchesCategory(r))
+      .filter(r => matchesMood(r))
+      .filter(r => matchesSearch(r));
 
     setFilteredRecipes(filtered);
   };
@@ -116,25 +196,47 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
     });
   };
 
-  const renderRecipeCard = ({ item }: { item: Recipe }) => (
-    <TouchableOpacity
-      style={styles.recipeCard}
-      onPress={() => handleRecipePress(item)}
-      activeOpacity={0.8}
-    >
-      <LinearGradient
-        colors={['#f0fdf7', '#dbeafe']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.cardGradient}
-      >
-        {/* Card Content */}
-        <View style={styles.cardContent}>
-          {/* Emoji */}
-          <Text style={styles.cardEmoji}>{item.emoji || '🍽️'}</Text>
+  const toggleFavorite = async (recipeId: number) => {
+    try {
+      const newFavorites = favorites.includes(recipeId)
+        ? favorites.filter(id => id !== recipeId)
+        : [...favorites, recipeId];
+      
+      setFavorites(newFavorites);
+      await AsyncStorage.setItem('favorites', JSON.stringify(newFavorites));
+    } catch (error) {
+      console.error('Favoriler kaydedilirken hata:', error);
+    }
+  };
 
-          {/* Title */}
-          <Text style={styles.cardTitle} numberOfLines={2}>
+  const renderRecipeCard = ({ item }: { item: Recipe }) => {
+    const isFavorite = favorites.includes(item.id);
+    
+    return (
+      <TouchableOpacity
+        style={styles.recipeCard}
+        onPress={() => handleRecipePress(item)}
+        activeOpacity={0.8}
+      >
+        <LinearGradient
+          colors={['#f0fdf7', '#dbeafe']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.cardGradient}
+        >
+          {/* Card Header with Favorite Button */}
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardEmoji}>{item.emoji || '🍽️'}</Text>
+            <TouchableOpacity
+              style={styles.favoriteButton}
+              onPress={() => toggleFavorite(item.id)}
+            >
+              <Text style={{ fontSize: 16 }}>{isFavorite ? '❤️' : '🤍'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Title - Compact */}
+          <Text style={styles.cardTitle} numberOfLines={1}>
             {item.name}
           </Text>
 
@@ -143,16 +245,23 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.categoryText}>{item.category}</Text>
           </View>
 
-          {/* Meta Info */}
+          {/* Meta Info - Compressed */}
           <View style={styles.cardMeta}>
-            <View style={styles.metaItem}>
-              <Text style={styles.metaLabel}>⏱️</Text>
-              <Text style={styles.metaValue}>{item.cook_time} dk</Text>
+            <View style={styles.metaItemRow}>
+              <Text style={styles.metaValue}>⏱️ {item.cook_time}dk</Text>
             </View>
-            <View style={styles.metaItem}>
-              <Text style={styles.metaLabel}>📊</Text>
-              <Text style={styles.metaValue}>{item.difficulty || 'Orta'}</Text>
+            <View style={styles.metaDivider} />
+            <View style={styles.metaItemRow}>
+              <Text style={styles.metaValue}>📊 {item.difficulty || 'Orta'}</Text>
             </View>
+            {item.calories && (
+              <>
+                <View style={styles.metaDivider} />
+                <View style={styles.metaItemRow}>
+                  <Text style={styles.metaValue}>🔥 {item.calories}kcal</Text>
+                </View>
+              </>
+            )}
           </View>
 
           {/* View Button */}
@@ -160,18 +269,22 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
             style={styles.viewButton}
             onPress={() => handleRecipePress(item)}
           >
-            <Text style={styles.viewButtonText}>Tarifi Gör</Text>
+            <Text style={styles.viewButtonText}>Tarifi Gör →</Text>
           </TouchableOpacity>
-        </View>
-      </LinearGradient>
-    </TouchableOpacity>
-  );
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <Text style={styles.emptyEmoji}>🔍</Text>
       <Text style={styles.emptyText}>Tarif bulunamadı</Text>
-      <Text style={styles.emptySubtext}>Arama kriterlerinizi değiştirmeyi deneyin</Text>
+      <Text style={styles.emptySubtext}>
+        {selectedIngredients.length > 0 || selectedMood || searchQuery
+          ? 'Filtre kriterlerinizi değiştirmeyi deneyin'
+          : 'Tarifler yükleniyor...'}
+      </Text>
     </View>
   );
 
@@ -230,8 +343,9 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Category Filter */}
+        {/* Category Filter - LEVEL 2 */}
         <View style={styles.filterContainer}>
+          <Text style={styles.filterLabel}>🏷️ Kategori:</Text>
           <FlatList
             horizontal={true}
             showsHorizontalScrollIndicator={false}
@@ -248,7 +362,7 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
                   styles.filterButton,
                   selectedCategory === category && styles.filterButtonActive,
                 ]}
-                activeOpacity={0.7}
+                activeOpacity={0.6}
               >
                 <Text
                   style={[
@@ -263,10 +377,28 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
           />
         </View>
 
-        {/* Results Info */}
+        {/* Advanced Filters Button */}
+        <View style={styles.advancedFilterBar}>
+          <TouchableOpacity
+            style={[
+              styles.filterIconButton,
+              (selectedIngredients.length > 0 || selectedMood) && styles.filterIconButtonActive,
+            ]}
+            onPress={() => setShowAdvancedFilters(true)}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.filterIconText}>
+              ⚙️ {selectedIngredients.length > 0 || selectedMood ? '●' : ''} Filtreler
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Results Info - Show filtering status */}
         <View style={styles.resultsInfo}>
           <Text style={styles.resultsText}>
-            ✨ {filteredRecipes.length} tarif bulundu
+            ✨ {filteredRecipes.length} tarif
+            {selectedIngredients.length > 0 && ` • 🥘 ${selectedIngredients.length} malzeme`}
+            {selectedMood && ` • ${selectedMood === 'Hızlı' ? '⚡' : selectedMood === 'Tok' ? '🍖' : selectedMood === 'Hafif' ? '🥗' : '💚'} ${selectedMood}`}
           </Text>
         </View>
 
@@ -282,6 +414,106 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
           contentContainerStyle={styles.gridContainer}
         />
       </ScrollView>
+
+      {/* Advanced Filters Modal */}
+      <Modal
+        visible={showAdvancedFilters}
+        animationType="slide"
+        transparent={false}
+      >
+        <View style={styles.modalContainer}>
+          <LinearGradient
+            colors={['#10B981', '#059669']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.modalHeader}
+          >
+            <TouchableOpacity 
+              onPress={() => setShowAdvancedFilters(false)}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.modalCloseButton}>← Geri</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>🔍 Gelişmiş Filtreler</Text>
+            <View style={{ width: 50 }} />
+          </LinearGradient>
+
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            {/* LEVEL 1: Ingredients Filter */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>🥘 Malzeme Seçin (Level 1)</Text>
+              <View style={styles.ingredientGrid}>
+                {getIngredientsFromRecipes().map((ingredient) => (
+                  <TouchableOpacity
+                    key={ingredient}
+                    style={[
+                      styles.ingredientChip,
+                      selectedIngredients.includes(ingredient) && styles.ingredientChipActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedIngredients(
+                        selectedIngredients.includes(ingredient)
+                          ? selectedIngredients.filter(i => i !== ingredient)
+                          : [...selectedIngredients, ingredient]
+                      );
+                    }}
+                    activeOpacity={0.6}
+                  >
+                    <Text
+                      style={[
+                        styles.ingredientChipText,
+                        selectedIngredients.includes(ingredient) && styles.ingredientChipTextActive,
+                      ]}
+                    >
+                      {ingredient}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* LEVEL 3: Mood Filter */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>😋 Mood Seçin (Level 3)</Text>
+              <View style={styles.moodGrid}>
+                {moodOptions.map((mood) => (
+                  <TouchableOpacity
+                    key={mood.label}
+                    style={[
+                      styles.moodButton,
+                      selectedMood === mood.label && styles.moodButtonActive,
+                    ]}
+                    onPress={() => setSelectedMood(selectedMood === mood.label ? null : mood.label)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.moodIcon}>{mood.icon}</Text>
+                    <Text
+                      style={[
+                        styles.moodLabel,
+                        selectedMood === mood.label && styles.moodLabelActive,
+                      ]}
+                    >
+                      {mood.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Reset Filters Button */}
+            <TouchableOpacity
+              style={styles.resetButton}
+              onPress={() => {
+                setSelectedIngredients([]);
+                setSelectedMood(null);
+              }}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.resetButtonText}>🔄 Filtreleri Temizle</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     </Animated.View>
   );
 };
@@ -325,49 +557,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 48,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 44,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
     elevation: 2,
   },
   searchIcon: {
-    fontSize: 18,
-    marginRight: 8,
+    fontSize: 16,
+    marginRight: 6,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     color: '#1F2937',
     fontWeight: '500',
   },
   clearButton: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#9CA3AF',
-    paddingLeft: 8,
+    paddingLeft: 6,
   },
   filterContainer: {
-    paddingVertical: 12,
+    paddingVertical: 8,
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginHorizontal: 12,
+    marginBottom: 6,
   },
   filterContent: {
-    paddingHorizontal: 12,
-    gap: 8,
+    paddingHorizontal: 8,
+    gap: 6,
   },
   filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 7,
     backgroundColor: '#F3F4F6',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#E5E7EB',
   },
   filterButtonActive: {
@@ -375,50 +614,77 @@ const styles = StyleSheet.create({
     borderColor: '#059669',
   },
   filterButtonText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#6B7280',
   },
   filterButtonTextActive: {
     color: '#FFF',
   },
+  advancedFilterBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  filterIconButton: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+  },
+  filterIconButtonActive: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#0369A1',
+  },
+  filterIconText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+    textAlign: 'center',
+  },
   resultsInfo: {
     backgroundColor: '#DBEAFE',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginHorizontal: 16,
-    marginBottom: 16,
+    borderRadius: 7,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginHorizontal: 12,
+    marginBottom: 10,
   },
   resultsText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#0369A1',
     textAlign: 'center',
   },
   gridContainer: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingBottom: 20,
+    paddingTop: 8,
   },
   gridWrapper: {
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 8,
-    marginBottom: 12,
+    justifyContent: 'space-around',
+    gap: 10,
+    paddingHorizontal: 4,
+    marginBottom: 10,
   },
   recipeCard: {
     flex: 1,
-    maxWidth: '48%',
+    maxWidth: '49%',
     borderRadius: 12,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     elevation: 3,
+    minHeight: 280,
   },
   cardGradient: {
     flex: 1,
     borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    justifyContent: 'space-between',
   },
   cardContent: {
     alignItems: 'center',
@@ -426,35 +692,67 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 240,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    marginBottom: 4,
+  },
   cardEmoji: {
-    fontSize: 48,
-    marginBottom: 8,
+    fontSize: 32,
+  },
+  favoriteButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     color: '#1F2937',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   categoryBadge: {
     backgroundColor: '#10B981',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 5,
+    marginBottom: 5,
+    alignSelf: 'center',
   },
   categoryText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#FFF',
   },
   cardMeta: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 0,
     width: '100%',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginBottom: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 2,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderRadius: 5,
+  },
+  metaItemRow: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    paddingVertical: 3,
+    paddingHorizontal: 3,
+  },
+  metaDivider: {
+    width: 0.8,
+    height: 18,
+    backgroundColor: '#D1D5DB',
   },
   metaItem: {
     flexDirection: 'row',
@@ -469,17 +767,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   metaValue: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: '#1F2937',
   },
   viewButton: {
     backgroundColor: '#10B981',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 7,
     width: '100%',
     alignItems: 'center',
+    marginTop: 2,
   },
   viewButtonText: {
     color: '#FFF',
@@ -504,5 +803,111 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  // Modal Styles for Advanced Filters
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    paddingTop: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  modalCloseButton: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFF',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  filterSection: {
+    marginBottom: 20,
+  },
+  filterSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 10,
+  },
+  ingredientGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  ingredientChip: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 7,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  ingredientChipActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#059669',
+  },
+  ingredientChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  ingredientChipTextActive: {
+    color: '#FFF',
+  },
+  moodGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  moodButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  moodButtonActive: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#10B981',
+  },
+  moodIcon: {
+    fontSize: 28,
+    marginBottom: 4,
+  },
+  moodLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  moodLabelActive: {
+    color: '#10B981',
+  },
+  resetButton: {
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 20,
+    alignItems: 'center',
+  },
+  resetButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
   },
 });

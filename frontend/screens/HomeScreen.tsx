@@ -136,26 +136,29 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const loadRecipes = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getRecipes(undefined, undefined, 0, 8);
+      // TÜM TAREFLERİ YÜKLEYİN - limit 50 veya daha fazla
+      const response = await apiService.getRecipes(undefined, undefined, 0, 50);
       
       if (response && Array.isArray(response)) {
         const recipesWithEmoji = response.map((recipe: any, index: number) => ({
           ...recipe,
-          emoji: recipe.emoji || ['🍕', '🍝', '🍜', '🍲', '🌮', '🍱', '🥘', '🍛'][index % 8],
+          emoji: recipe.emoji || ['🍕', '🍝', '🍜', '🍲', '🌮', '🍱', '🥘', '🍛', '🥗', '🍗', '🍖', '🥩'][index % 12],
         }));
         setRecipes(recipesWithEmoji);
+        console.log(`✅ ${recipesWithEmoji.length} tarif yüklendi`);
       }
     } catch (error) {
       console.error('Tarifler yüklenirken hata:', error);
+      // Fallback - tüm kategorileri temsil et
       setRecipes([
-        { id: 1, name: 'Pasta', emoji: '🍝', category: 'İtalyan', instructions: [], ingredients: [], cook_time: 30, difficulty: 'Kolay' },
-        { id: 2, name: 'Biryani', emoji: '🍲', category: 'Hintçe', instructions: [], ingredients: [], cook_time: 45, difficulty: 'Orta' },
-        { id: 3, name: 'Pizza', emoji: '🍕', category: 'İtalyan', instructions: [], ingredients: [], cook_time: 35, difficulty: 'Kolay' },
-        { id: 4, name: 'Sushi', emoji: '🍣', category: 'Japon', instructions: [], ingredients: [], cook_time: 40, difficulty: 'Zor' },
-        { id: 5, name: 'Steak', emoji: '🥩', category: 'Amerikan', instructions: [], ingredients: [], cook_time: 25, difficulty: 'Orta' },
-        { id: 6, name: 'Tacos', emoji: '🌮', category: 'Meksika', instructions: [], ingredients: [], cook_time: 20, difficulty: 'Kolay' },
-        { id: 7, name: 'Ramen', emoji: '🍜', category: 'Japon', instructions: [], ingredients: [], cook_time: 50, difficulty: 'Zor' },
-        { id: 8, name: 'Curry', emoji: '🍛', category: 'Hintçe', instructions: [], ingredients: [], cook_time: 60, difficulty: 'Orta' },
+        { id: 1, name: 'Pasta', emoji: '🍝', category: 'Ana Yemek', instructions: [], ingredients: [], cook_time: 30, difficulty: 'Kolay' },
+        { id: 2, name: 'Biryani', emoji: '🍲', category: 'Ana Yemek', instructions: [], ingredients: [], cook_time: 45, difficulty: 'Orta' },
+        { id: 3, name: 'Pizza', emoji: '🍕', category: 'Ana Yemek', instructions: [], ingredients: [], cook_time: 35, difficulty: 'Kolay' },
+        { id: 4, name: 'Sushi', emoji: '🍣', category: 'Ara Öğün', instructions: [], ingredients: [], cook_time: 40, difficulty: 'Zor' },
+        { id: 5, name: 'Steak', emoji: '🥩', category: 'Ana Yemek', instructions: [], ingredients: [], cook_time: 25, difficulty: 'Orta' },
+        { id: 6, name: 'Tacos', emoji: '🌮', category: 'Ana Yemek', instructions: [], ingredients: [], cook_time: 20, difficulty: 'Kolay' },
+        { id: 7, name: 'Ramen', emoji: '🍜', category: 'Çorba', instructions: [], ingredients: [], cook_time: 50, difficulty: 'Zor' },
+        { id: 8, name: 'Curry', emoji: '🍛', category: 'Ana Yemek', instructions: [], ingredients: [], cook_time: 60, difficulty: 'Orta' },
       ]);
     } finally {
       setLoading(false);
@@ -164,12 +167,18 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleSpin = () => {
     const spinRecipes = filteredRecipes.length > 0 ? filteredRecipes : recipes;
-    if (isSpinning || spinRecipes.length === 0) return;
+    console.log(`🎡 Spin başlatılıyor - Toplam tarifler: ${spinRecipes.length}`);
+    
+    if (isSpinning || spinRecipes.length === 0) {
+      console.log(`❌ Spin yapılamıyor - isSpinning: ${isSpinning}, tarifler: ${spinRecipes.length}`);
+      return;
+    }
 
     setIsSpinning(true);
 
     const selectedIndex = Math.floor(Math.random() * spinRecipes.length);
     selectedIndexRef.current = selectedIndex;
+    console.log(`✓ Seçilen tarif indeksi: ${selectedIndex} - ${spinRecipes[selectedIndex]?.name}`);
 
     const segmentAngle = 360 / spinRecipes.length;
     const targetAngle = selectedIndex * segmentAngle;
@@ -188,6 +197,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       currentRotationRef.current = finalRotation;
       setIsSpinning(false);
       setSelectedRecipe(spinRecipes[selectedIndex]);
+      console.log(`🎉 Spin tamamlandı - Sonuç: ${spinRecipes[selectedIndex]?.name}`);
     });
   };
 

@@ -18,10 +18,8 @@ import { TermsScreen } from '../screens/TermsScreen';
 import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
 import { AboutScreen } from '../screens/AboutScreen';
 import { RecipesScreen } from '../screens/RecipesScreen';
-
-const FavoritesScreen = () => (
-  <PlaceholderScreen title="❤️ Favoriler" />
-);
+import { FavoritesScreen } from '../screens/FavoritesScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
 
 const ShoppingScreen = () => (
   <PlaceholderScreen title="🛒 Alışveriş" />
@@ -38,6 +36,7 @@ const PlaceholderScreen = ({ title }: { title: string }) => (
 const HomeStack = createNativeStackNavigator();
 const RecipesStack = createNativeStackNavigator();
 const FavoritesStack = createNativeStackNavigator();
+const HistoryStack = createNativeStackNavigator();
 const ShoppingStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -127,6 +126,11 @@ function FavoritesStackScreen() {
         component={FavoritesScreen}
         options={{ title: 'Favoriler' }}
       />
+      <FavoritesStack.Screen
+        name="RecipeDetail"
+        component={RecipeDetailScreen}
+        options={{ title: 'Tarif Detayları' }}
+      />
     </FavoritesStack.Navigator>
   ) : null;
 }
@@ -151,6 +155,34 @@ function ShoppingStackScreen() {
         options={{ title: 'Alışveriş Listesi' }}
       />
     </ShoppingStack.Navigator>
+  ) : null;
+}
+
+function HistoryStackScreen() {
+  const [isFocused, setIsFocused] = React.useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, [])
+  );
+
+  return isFocused ? (
+    <HistoryStack.Navigator
+      screenOptions={stackScreenOptions}
+    >
+      <HistoryStack.Screen
+        name="HistoryMain"
+        component={HistoryScreen}
+        options={{ title: 'Tarih' }}
+      />
+      <HistoryStack.Screen
+        name="RecipeDetail"
+        component={RecipeDetailScreen}
+        options={{ title: 'Tarif Detayları' }}
+      />
+    </HistoryStack.Navigator>
   ) : null;
 }
 
@@ -259,6 +291,14 @@ export const AppNavigator: React.FC = () => {
         options={{
           tabBarLabel: 'Favoriler',
           tabBarIcon: ({ color }) => <TabIcon icon="❤️" color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="HistoryTab"
+        component={HistoryStackScreen}
+        options={{
+          tabBarLabel: 'Tarih',
+          tabBarIcon: ({ color }) => <TabIcon icon="📜" color={color} />,
         }}
       />
       <Tab.Screen
