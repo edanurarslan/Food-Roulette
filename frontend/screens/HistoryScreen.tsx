@@ -51,7 +51,7 @@ const MAX_HISTORY_ITEMS = 20;
 export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
   const [history, setHistory] = useState<HistoryRecipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterCategory, setFilterCategory] = useState<string>('Tümü');
+  const [filterCategories, setFilterCategories] = useState<Set<string>>(new Set(['Tümü']));
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const categories = ['Tümü', 'Çorba', 'Ana Yemek', 'Kahvaltı', 'Ara Öğün', 'Yan Yemek'];
@@ -189,16 +189,17 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const getFilteredHistory = () => {
-    if (filterCategory === 'Tümü') {
+    if (filterCategories.has('Tümü')) {
       return history;
     }
-    // Kategoriyi normalize et ve karşılaştır
+    // Kategorileri normalize et ve karşılaştır
     const normalized = history.filter(h => {
       const historyCategory = h.category?.trim().toLowerCase() || '';
-      const selectedCategory = filterCategory.trim().toLowerCase();
-      return historyCategory === selectedCategory;
+      return Array.from(filterCategories).some(cat =>
+        (cat as string).trim().toLowerCase() === historyCategory
+      );
     });
-    console.log(`Filtering by: ${filterCategory}, Found: ${normalized.length} items`);
+    console.log(`Filtering by: ${Array.from(filterCategories).join(', ')}, Found: ${normalized.length} items`);
     return normalized;
   };
 
@@ -316,17 +317,38 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
             contentContainerStyle={styles.filterContent}
             renderItem={({ item: category }) => (
               <TouchableOpacity
-                onPress={() => setFilterCategory(category)}
+                onPress={() => {
+                  const newCategories = new Set(filterCategories);
+                  
+                  if (category === 'Tümü') {
+                    newCategories.clear();
+                    newCategories.add('Tümü');
+                  } else {
+                    newCategories.delete('Tümü');
+                    
+                    if (newCategories.has(category)) {
+                      newCategories.delete(category);
+                    } else {
+                      newCategories.add(category);
+                    }
+                    
+                    if (newCategories.size === 0) {
+                      newCategories.add('Tümü');
+                    }
+                  }
+                  
+                  setFilterCategories(newCategories);
+                }}
                 style={[
                   styles.filterButton,
-                  filterCategory === category && styles.filterButtonActive,
+                  filterCategories.has(category) && styles.filterButtonActive,
                 ]}
                 activeOpacity={0.6}
               >
                 <Text
                   style={[
                     styles.filterButtonText,
-                    filterCategory === category && styles.filterButtonTextActive,
+                    filterCategories.has(category) && styles.filterButtonTextActive,
                   ]}
                 >
                   {category}

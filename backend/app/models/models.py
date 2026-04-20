@@ -150,6 +150,7 @@ class ShoppingItem(Base):
     item_name = Column(String(255), nullable=False)
     amount = Column(String(100))
     unit = Column(String(50))
+    category = Column(String(50), default="Diğer")
     is_checked = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

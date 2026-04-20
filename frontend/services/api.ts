@@ -128,13 +128,15 @@ class ApiService {
     itemName: string,
     amount?: number,
     unit?: string,
-    recipeId?: number
+    recipeId?: number,
+    category?: string
   ) {
     const response = await this.api.post('/shopping', {
       item_name: itemName,
       amount,
       unit,
       recipe_id: recipeId,
+      category: category || 'Diğer',
     });
     return response.data;
   }

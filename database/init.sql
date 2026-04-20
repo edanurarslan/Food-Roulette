@@ -89,6 +89,8 @@ CREATE TABLE shopping_items (
     recipe_id INTEGER REFERENCES recipes(id) ON DELETE SET NULL,
     item_name VARCHAR(255) NOT NULL,
     amount VARCHAR(100),
+    unit VARCHAR(50),
+    category VARCHAR(50) DEFAULT 'Diğer',
     is_checked BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -96,6 +98,7 @@ CREATE TABLE shopping_items (
 
 CREATE INDEX idx_shopping_user ON shopping_items(user_id);
 CREATE INDEX idx_shopping_recipe ON shopping_items(recipe_id);
+CREATE INDEX idx_shopping_category ON shopping_items(category);
 
 -- Ratings Table
 CREATE TABLE ratings (

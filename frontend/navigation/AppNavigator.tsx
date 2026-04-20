@@ -20,10 +20,8 @@ import { AboutScreen } from '../screens/AboutScreen';
 import { RecipesScreen } from '../screens/RecipesScreen';
 import { FavoritesScreen } from '../screens/FavoritesScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
-
-const ShoppingScreen = () => (
-  <PlaceholderScreen title="🛒 Alışveriş" />
-);
+import { ShoppingListScreen } from '../screens/ShoppingListScreen';
+import { WeeklyMenuScreen } from '../screens/WeeklyMenuScreen';
 
 const PlaceholderScreen = ({ title }: { title: string }) => (
   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -151,8 +149,13 @@ function ShoppingStackScreen() {
     >
       <ShoppingStack.Screen
         name="ShoppingMain"
-        component={ShoppingScreen}
+        component={ShoppingListScreen}
         options={{ title: 'Alışveriş Listesi' }}
+      />
+      <ShoppingStack.Screen
+        name="Weekly"
+        component={WeeklyMenuScreen}
+        options={{ title: 'Haftalık Menu' }}
       />
     </ShoppingStack.Navigator>
   ) : null;

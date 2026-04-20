@@ -30,6 +30,7 @@ async def get_shopping_list(
         query = query.filter(ShoppingItem.is_checked == False)
     
     items = query.all()
+    print(f"🛒 [Shopping] {len(items)} item yüklendi - Kategoriler: {[item.category for item in items]}")
     return items
 
 
@@ -44,17 +45,28 @@ async def add_shopping_item(
     
     - **item_name**: Name of the item
     - **amount**: Quantity (e.g., "2 cups", "500g")
+    - **category**: Category (Sebze, Meyve, vs.)
     - **recipe_id**: Optional recipe ID if item is from a recipe
     """
+    # Normalize category - trim whitespace
+    category = (item_data.category or "Diğer").strip()
+    
+    print(f"📝 [Shopping] Yeni item ekleniyor: {item_data.item_name} (Kategori: '{category}')")
+    
     new_item = ShoppingItem(
         user_id=UUID(current_user_id),
-        **item_data.dict()
+        item_name=item_data.item_name,
+        recipe_id=item_data.recipe_id,
+        amount=item_data.amount,
+        unit=item_data.unit,
+        category=category,
     )
     
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
     
+    print(f"✅ [Shopping] Item başarıyla eklendi: ID={new_item.id}, name={new_item.item_name}, category='{new_item.category}'")
     return new_item
 
 

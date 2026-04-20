@@ -188,12 +188,16 @@ class ShoppingItemCreate(BaseModel):
     item_name: str = Field(..., min_length=1, max_length=255)
     recipe_id: Optional[int] = None
     amount: Optional[str] = None
+    unit: Optional[str] = None
+    category: Optional[str] = "Diğer"
 
 
 class ShoppingItemUpdate(BaseModel):
     """Shopping item update schema"""
     item_name: Optional[str] = None
     amount: Optional[str] = None
+    unit: Optional[str] = None
+    category: Optional[str] = None
     is_checked: Optional[bool] = None
 
 
@@ -204,6 +208,8 @@ class ShoppingItemResponse(BaseModel):
     recipe_id: Optional[int] = None
     item_name: str
     amount: Optional[str] = None
+    unit: Optional[str] = None
+    category: str = "Diğer"
     is_checked: bool
     created_at: datetime
     updated_at: datetime

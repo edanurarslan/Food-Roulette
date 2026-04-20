@@ -52,7 +52,7 @@ export const FavoritesScreen: React.FC<Props> = ({ navigation }) => {
   const [filteredFavorites, setFilteredFavorites] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'recent' | 'name' | 'difficulty'>('recent');
-  const [selectedCategory, setSelectedCategory] = useState('Tümü');
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set(['Tümü']));
   const [categories, setCategories] = useState<string[]>(['Tümü']);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -130,9 +130,9 @@ export const FavoritesScreen: React.FC<Props> = ({ navigation }) => {
   const applyFilters = (recipesToFilter: Recipe[] = favorites) => {
     let filtered = recipesToFilter;
     
-    // Category filter
-    if (selectedCategory !== 'Tümü') {
-      filtered = filtered.filter(r => r.category === selectedCategory);
+    // Category filter - support multiple categories
+    if (!selectedCategories.has('Tümü')) {
+      filtered = filtered.filter(r => selectedCategories.has(r.category));
     }
     
     // Sort
@@ -194,8 +194,8 @@ export const FavoritesScreen: React.FC<Props> = ({ navigation }) => {
               
               // Reapply filters with updated list
               let filtered = updatedFavorites;
-              if (selectedCategory !== 'Tümü') {
-                filtered = filtered.filter(r => r.category === selectedCategory);
+              if (!selectedCategories.has('Tümü')) {
+                filtered = filtered.filter(r => selectedCategories.has(r.category));
               }
               
               let sorted = [...filtered];
@@ -238,7 +238,7 @@ export const FavoritesScreen: React.FC<Props> = ({ navigation }) => {
   // Update filters when sort or category changes
   React.useEffect(() => {
     applyFilters();
-  }, [sortBy, selectedCategory, favorites]);
+  }, [sortBy, selectedCategories, favorites]);
 
   const renderFavoriteCard = ({ item }: { item: Recipe }) => (
     <View style={styles.favoriteCard}>
@@ -352,17 +352,38 @@ export const FavoritesScreen: React.FC<Props> = ({ navigation }) => {
               contentContainerStyle={styles.filterContent}
               renderItem={({ item: category }) => (
                 <TouchableOpacity
-                  onPress={() => setSelectedCategory(category)}
+                  onPress={() => {
+                    const newCategories = new Set(selectedCategories);
+                    
+                    if (category === 'Tümü') {
+                      newCategories.clear();
+                      newCategories.add('Tümü');
+                    } else {
+                      newCategories.delete('Tümü');
+                      
+                      if (newCategories.has(category)) {
+                        newCategories.delete(category);
+                      } else {
+                        newCategories.add(category);
+                      }
+                      
+                      if (newCategories.size === 0) {
+                        newCategories.add('Tümü');
+                      }
+                    }
+                    
+                    setSelectedCategories(newCategories);
+                  }}
                   style={[
                     styles.categoryFilterButton,
-                    selectedCategory === category && styles.categoryFilterButtonActive,
+                    selectedCategories.has(category) && styles.categoryFilterButtonActive,
                   ]}
                   activeOpacity={0.6}
                 >
                   <Text
                     style={[
                       styles.categoryFilterButtonText,
-                      selectedCategory === category && styles.categoryFilterButtonTextActive,
+                      selectedCategories.has(category) && styles.categoryFilterButtonTextActive,
                     ]}
                   >
                     {category}

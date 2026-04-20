@@ -13,6 +13,7 @@ import {
   Animated,
   Share,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -192,6 +193,164 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
+  // Auto-categorize ingredients
+  const getCategoryForIngredient = (ingredientName: string): string => {
+    const name = ingredientName.toLowerCase().trim();
+    
+    // Sebze - Vegetables
+    const vegetables = [
+      'domates', 'soğan', 'sarımsak', 'biber', 'patlıcan', 'kuru fasulye', 'mısır', 
+      'patates', 'lahana', 'marul', 'havuç', 'ıspanak', 'brokoli', 'salata', 'pırasa',
+      'turp', 'kabak', 'dereotu', 'rezene', 'kereviz', 'enginar', 'bezelye', 'fasulye',
+      'nane', 'maydanoz', 'fesleğen', 'tatsı biber', 'mantı', 'makarna'
+    ];
+    if (vegetables.some(v => name.includes(v))) return 'Sebze';
+    
+    // Meyve - Fruits
+    const fruits = [
+      'elma', 'portakal', 'muz', 'çilek', 'karpuz', 'üzüm', 'limon', 'mandalina', 
+      'vişne', 'kayısı', 'şeftali', 'ananas', 'ahududu', 'avokado', 'kiwi', 'mango',
+      'nar', 'hurma', 'dut', 'kiraz'
+    ];
+    if (fruits.some(f => name.includes(f))) return 'Meyve';
+    
+    // Et/Balık - Meat/Fish
+    const meat = [
+      'tavuk', 'kıyma', 'biftek', 'balık', 'somon', 'levrek', 'et', 'doner', 'köfte',
+      'sos', 'guanciale', 'jambon', 'bacon', 'domuz', 'hindi', 'dana', 'kuzu', 'koyun',
+      'sıtıl', 'karides', 'midye', 'tırnak', 'ostrıç', 'sushi', 'steak', 'bonfile',
+      'ceviz', 'kaymak', 'balık yumurtası'
+    ];
+    if (meat.some(m => name.includes(m))) return 'Et/Balık';
+    
+    // Süt Ürünleri - Dairy
+    const dairy = [
+      'yoğurt', 'peynir', 'krema', 'sütaş', 'süt', 'tereyağı', 'mozarella', 'cheddar',
+      'feta', 'parmesan', 'kaymak', 'ricotta', 'mascarpone', 'beyaz peynir', 'kashkaval',
+      'hellim', 'çerkez peyniri', 'krem', 'yağ', 'tat'
+    ];
+    if (dairy.some(d => name.includes(d))) return 'Süt Ürünleri';
+    
+    // Baharatlar - Spices/Seasonings
+    const spices = [
+      'tuz', 'biber', 'karabiber', 'tarçın', 'sumak', 'kimyon', 'kırmızı', 'maydanoz',
+      'baharat', 'pulbiber', 'pul', 'zencefil', 'muskatnöz', 'karanfil', 'anason',
+      'rezene', 'sarı', 'tuzlama', 'koriant', 'kimyon', 'cardamom', 'kakao', 'şeker',
+      'bal', 'asit', 'sirke', 'sos', 'zeytinyağı', 'yağ', 'kepek'
+    ];
+    if (spices.some(s => name.includes(s))) return 'Baharatlar';
+    
+    // Default
+    return 'Diğer';
+  };
+
+  const handleAddToShopping = async () => {
+    try {
+      // Parse ingredients
+      const addedItems: string[] = [];
+      const recipeIdNum = parseInt(route.params.recipeId) || 0;
+
+      recipe.ingredients.forEach((ingredient: any) => {
+        let name = '';
+        let quantity = '1';
+        let unit = 'adet';
+
+        // Handle both formats: object {name, amount} or string "Malzeme Miktar"
+        if (typeof ingredient === 'string') {
+          // API format: "Spaghetti 400g"
+          const parts = ingredient.trim().split(' ');
+          name = parts.slice(0, -1).join(' ') || ingredient;
+          const lastPart = parts[parts.length - 1];
+          
+          const match = lastPart.match(/^(\d+\.?\d*)(.*)$/);
+          if (match) {
+            quantity = match[1];
+            unit = match[2] || 'adet';
+          }
+        } else if (ingredient.name && ingredient.amount) {
+          // Mock format: {name: "Spaghetti", amount: "400g"}
+          name = ingredient.name;
+          const parts = ingredient.amount.split(' ');
+          quantity = parts[0] || '1';
+          unit = parts[1] || 'adet';
+        }
+
+        if (name) {
+          addedItems.push(name.trim());
+          
+          // Try to add to backend
+          apiService.addShoppingItem(
+            name.trim(),
+            parseFloat(quantity),
+            unit,
+            recipeIdNum
+          ).catch((error) => {
+            console.warn(`Backend'e eklenemedi, sadece local'da: ${name.trim()}`, error);
+          });
+        }
+      });
+
+      if (addedItems.length === 0) {
+        Alert.alert('Uyarı', 'Eklenecek malzeme bulunamadı');
+        return;
+      }
+
+      // Also save to AsyncStorage for offline support
+      const shoppingData = await AsyncStorage.getItem('shoppingList');
+      const shoppingList = shoppingData ? JSON.parse(shoppingData) : [];
+      
+      recipe.ingredients.forEach((ingredient: any) => {
+        let name = '';
+        let quantity = '1';
+        let unit = 'adet';
+
+        if (typeof ingredient === 'string') {
+          const parts = ingredient.trim().split(' ');
+          name = parts.slice(0, -1).join(' ') || ingredient;
+          const lastPart = parts[parts.length - 1];
+          const match = lastPart.match(/^(\d+\.?\d*)(.*)$/);
+          if (match) {
+            quantity = match[1];
+            unit = match[2] || 'adet';
+          }
+        } else if (ingredient.name && ingredient.amount) {
+          name = ingredient.name;
+          const parts = ingredient.amount.split(' ');
+          quantity = parts[0] || '1';
+          unit = parts[1] || 'adet';
+        }
+
+        if (name) {
+          const shoppingItem = {
+            id: Date.now().toString() + Math.random(),
+            name: name.trim(),
+            quantity: quantity,
+            unit: unit,
+            category: getCategoryForIngredient(name.trim()),
+            isChecked: false,
+            createdAt: Date.now(),
+          };
+          shoppingList.push(shoppingItem);
+        }
+      });
+      
+      await AsyncStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+      
+      console.log(`✅ ${addedItems.length} malzeme eklendi (Backend + Local)`);
+      
+      Alert.alert(
+        '✅ Başarılı!',
+        `"${recipe.name}" tarifinin tüm malzemeleri alışveriş listesine eklendi.\n\n${addedItems.slice(0, 3).join('\n')}${addedItems.length > 3 ? `\n+ ${addedItems.length - 3} daha` : ''}`,
+        [
+          { text: 'Tamam', onPress: () => {} },
+        ]
+      );
+    } catch (error) {
+      console.error('Alışveriş listesine ekleme hatası:', error);
+      Alert.alert('Hata', 'Malzemeler eklenirken hata oluştu');
+    }
+  };
+
   const heartScale = heartAnim.interpolate({
     inputRange: [1, 1.3],
     outputRange: [1, 1.3],
@@ -272,6 +431,13 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 </Animated.Text>
               </TouchableOpacity>
             </LinearGradient>
+
+            <TouchableOpacity
+              style={[styles.actionButtonSecondary, styles.shoppingButton]}
+              onPress={handleAddToShopping}
+            >
+              <Text style={styles.buttonIconSecondary}>🛒</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.actionButtonSecondary, styles.shareButton]}
@@ -481,6 +647,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderWidth: 1.5,
     borderColor: 'rgba(0, 0, 0, 0.08)',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    elevation: 2,
+  },
+  shoppingButton: {
+    backgroundColor: '#FFF9E6',
+    borderWidth: 1.5,
+    borderColor: '#FED7AA',
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

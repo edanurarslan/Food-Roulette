@@ -68,7 +68,7 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
 
   // Filter States - Level 1 to 4
   const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('Tümü');
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set(['Tümü']));
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -87,7 +87,7 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
 
   useEffect(() => {
     applyMultiLevelFilters();
-  }, [selectedIngredients, selectedCategory, selectedMood, searchQuery, recipes]);
+  }, [selectedIngredients, selectedCategories, selectedMood, searchQuery, recipes]);
 
   const loadRecipesAndFavorites = async () => {
     try {
@@ -142,8 +142,11 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
 
   // LEVEL 2: Kategori Filtresi
   const matchesCategory = (recipe: Recipe): boolean => {
-    if (selectedCategory === 'Tümü') return true;
-    return recipe.category?.toLowerCase() === selectedCategory.toLowerCase();
+    if (selectedCategories.has('Tümü')) return true;
+    
+    return Array.from(selectedCategories).some(category => 
+      recipe.category?.toLowerCase() === category.toLowerCase()
+    );
   };
 
   // LEVEL 3: Mood Filtresi
@@ -357,17 +360,38 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
             contentContainerStyle={styles.filterContent}
             renderItem={({ item: category }) => (
               <TouchableOpacity
-                onPress={() => setSelectedCategory(category)}
+                onPress={() => {
+                  const newCategories = new Set(selectedCategories);
+                  
+                  if (category === 'Tümü') {
+                    newCategories.clear();
+                    newCategories.add('Tümü');
+                  } else {
+                    newCategories.delete('Tümü');
+                    
+                    if (newCategories.has(category)) {
+                      newCategories.delete(category);
+                    } else {
+                      newCategories.add(category);
+                    }
+                    
+                    if (newCategories.size === 0) {
+                      newCategories.add('Tümü');
+                    }
+                  }
+                  
+                  setSelectedCategories(newCategories);
+                }}
                 style={[
                   styles.filterButton,
-                  selectedCategory === category && styles.filterButtonActive,
+                  selectedCategories.has(category) && styles.filterButtonActive,
                 ]}
                 activeOpacity={0.6}
               >
                 <Text
                   style={[
                     styles.filterButtonText,
-                    selectedCategory === category && styles.filterButtonTextActive,
+                    selectedCategories.has(category) && styles.filterButtonTextActive,
                   ]}
                 >
                   {category}
