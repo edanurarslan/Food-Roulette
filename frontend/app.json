@@ -5,6 +5,7 @@
     "name": "Food Roulette",
     "slug": "food-roulette",
     "version": "1.0.0",
+    "sdkVersion": "54.0.0",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -12,8 +13,17 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": ["POST_NOTIFICATIONS", "VIBRATE"]
     },
-    "web": {}
+    "web": {},
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#10B981"
+        }
+      ]
+    ]
   }
 }

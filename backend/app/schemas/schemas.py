@@ -35,6 +35,12 @@ class PasswordUpdate(BaseModel):
     confirm_password: str = Field(..., min_length=8)
 
 
+class ExpoPushTokenRegister(BaseModel):
+    """Register Expo push token for the authenticated user"""
+    expo_push_token: str = Field(..., min_length=10, max_length=512)
+    platform: Optional[str] = Field(None, max_length=20)
+
+
 class UserResponse(BaseModel):
     """User response schema"""
     id: UUID

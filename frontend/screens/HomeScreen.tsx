@@ -191,8 +191,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     Animated.timing(spinAnim, {
       toValue: finalRotation,
       duration: 4500,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1), // Smooth cubic-bezier easing
-      useNativeDriver: false,
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      useNativeDriver: true, // <-- İŞTE BURAYI TRUE YAPIYORUZ
     }).start(() => {
       currentRotationRef.current = finalRotation;
       setIsSpinning(false);

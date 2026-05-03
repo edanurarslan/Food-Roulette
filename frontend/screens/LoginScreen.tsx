@@ -72,6 +72,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView 
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always" 
       >
       {/* Gradient Header Background */}
       <LinearGradient
@@ -107,8 +108,8 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
               editable={!loading}
               value={email}
               onChangeText={setEmail}
-              onFocus={() => setEmailFocus(true)}
-              onBlur={() => setEmailFocus(false)}
+              //onFocus={() => setEmailFocus(true)}
+              //onBlur={() => setEmailFocus(false)}
             />
           </View>
         </View>
@@ -130,8 +131,8 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
               editable={!loading}
               value={password}
               onChangeText={setPassword}
-              onFocus={() => setPasswordFocus(true)}
-              onBlur={() => setPasswordFocus(false)}
+              //onFocus={() => setPasswordFocus(true)}
+              //onBlur={() => setPasswordFocus(false)}
             />
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}

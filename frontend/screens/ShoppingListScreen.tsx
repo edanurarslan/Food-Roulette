@@ -295,7 +295,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const renderItem = ({ item }: { item: ShoppingItem }) => (
-    <View style={styles.itemContainer}>
+    <View key={item.id} style={styles.itemContainer}>
       <LinearGradient
         colors={item.isChecked ? ['#F3F4F6', '#E5E7EB'] : ['#fff5e6', '#ffe6cc']}
         start={{ x: 0, y: 0 }}

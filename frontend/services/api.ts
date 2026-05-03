@@ -4,8 +4,27 @@
 
 import axios, { AxiosInstance } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const resolveApiUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  const webFallbackUrl = 'http://localhost:8000/api/v1';
+  const mobileFallbackUrl = 'http://172.20.10.4:8000/api/v1';
+
+  const isPrivateIpUrl = (url: string) =>
+    /https?:\/\/(10\.|127\.|172\.(1[6-9]|2\d|3[0-1])\.|192\.168\.)/.test(url);
+
+  const resolved =
+    Platform.OS === 'web'
+      ? envUrl && !isPrivateIpUrl(envUrl)
+        ? envUrl
+        : webFallbackUrl
+      : envUrl || mobileFallbackUrl;
+
+  return resolved.endsWith('/') ? resolved.slice(0, -1) : resolved;
+};
+
+const API_URL = resolveApiUrl();
 
 class ApiService {
   private api: AxiosInstance;
@@ -278,6 +297,30 @@ class ApiService {
 
   async deleteAccount() {
     const response = await this.api.delete('/users/account');
+    return response.data;
+  }
+
+  async registerPushToken(expoPushToken: string, platform?: string) {
+    await this.api.post('/users/push-token', {
+      expo_push_token: expoPushToken,
+      platform,
+    });
+  }
+
+  async sendSelfPushNotification(title: string, body: string, recipeId?: number) {
+    const response = await this.api.post('/notifications/push', {
+      title,
+      body,
+      recipe_id: recipeId,
+    });
+    return response.data;
+  }
+
+  async sendTimerCompletePush(recipeName: string, recipeId?: number) {
+    const response = await this.api.post('/notifications/timer-complete', {
+      recipe_name: recipeName,
+      recipe_id: recipeId,
+    });
     return response.data;
   }
 }

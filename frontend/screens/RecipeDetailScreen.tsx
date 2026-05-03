@@ -3,7 +3,7 @@
  * Tarif bilgileri, malzemeler, adımlar, favori butonu
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,22 @@ import {
   Share,
   ActivityIndicator,
   Alert,
+  TextInput,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from '../services/api';
+import {
+  scheduleCookingTimerNotification,
+  cancelCookingTimerNotification,
+  requestNotificationPermissions,
+  alertNotificationDenied,
+} from '../services/notifications';
+
+const STORAGE_RATINGS = 'recipeRatings';
+const STORAGE_STEP_PROGRESS = 'recipeStepProgress';
 
 type RootStackParamList = {
   RecipeDetail: { recipeId: string; recipeName: string };
@@ -66,17 +77,180 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const heartAnim = useRef(new Animated.Value(1)).current;
 
+  const [userRating, setUserRating] = useState<number | null>(null);
+  const [completedStepIndices, setCompletedStepIndices] = useState<Set<number>>(new Set());
+  const [timerMinutesInput, setTimerMinutesInput] = useState('');
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const endTimeRef = useRef<number | null>(null);
+  const timerFinishedRef = useRef(false);
+
+  const recipeKey = String(recipeId);
+
+  const loadLocalRatingAndSteps = useCallback(async () => {
+    try {
+      const ratingsRaw = await AsyncStorage.getItem(STORAGE_RATINGS);
+      const ratings = ratingsRaw ? JSON.parse(ratingsRaw) : {};
+      const r = ratings[recipeKey];
+      setUserRating(typeof r === 'number' && r >= 1 && r <= 5 ? r : null);
+
+      const stepsRaw = await AsyncStorage.getItem(STORAGE_STEP_PROGRESS);
+      const stepsAll = stepsRaw ? JSON.parse(stepsRaw) : {};
+      const done: number[] = stepsAll[recipeKey]?.completed ?? [];
+      setCompletedStepIndices(new Set(done.filter((n: number) => typeof n === 'number')));
+    } catch (e) {
+      console.warn('Local rating/steps yüklenemedi', e);
+    }
+  }, [recipeKey]);
+
+  const persistRating = async (stars: number) => {
+    try {
+      const ratingsRaw = await AsyncStorage.getItem(STORAGE_RATINGS);
+      const ratings = ratingsRaw ? JSON.parse(ratingsRaw) : {};
+      ratings[recipeKey] = stars;
+      await AsyncStorage.setItem(STORAGE_RATINGS, JSON.stringify(ratings));
+    } catch (e) {
+      console.warn('Rating kaydedilemedi', e);
+    }
+  };
+
+  const persistSteps = async (indices: Set<number>) => {
+    try {
+      const stepsRaw = await AsyncStorage.getItem(STORAGE_STEP_PROGRESS);
+      const stepsAll = stepsRaw ? JSON.parse(stepsRaw) : {};
+      stepsAll[recipeKey] = { completed: Array.from(indices).sort((a, b) => a - b) };
+      await AsyncStorage.setItem(STORAGE_STEP_PROGRESS, JSON.stringify(stepsAll));
+    } catch (e) {
+      console.warn('Adım ilerlemesi kaydedilemedi', e);
+    }
+  };
+
+  const finishTimerFlow = useCallback(async () => {
+    if (timerFinishedRef.current) return;
+    timerFinishedRef.current = true;
+    setIsTimerRunning(false);
+    endTimeRef.current = null;
+    await cancelCookingTimerNotification(recipeKey);
+    Alert.alert('Süre doldu!', `"${recipe.name}" için zamanlayıcı bitti.`);
+  }, [recipe.name, recipeKey]);
+
+  useEffect(() => {
+    loadLocalRatingAndSteps();
+  }, [loadLocalRatingAndSteps]);
+
+  useEffect(() => {
+    if (!loading && recipe?.cookTime) {
+      const mins = recipe.cookTime || 20;
+      if (!isTimerRunning) {
+        setRemainingSeconds(mins * 60);
+        setTimerMinutesInput(String(mins));
+      }
+    }
+  }, [recipe.id, recipe.cookTime, loading, isTimerRunning]);
+
+  useEffect(() => {
+    if (!isTimerRunning) {
+      timerFinishedRef.current = false;
+      return;
+    }
+    const id = setInterval(() => {
+      if (!endTimeRef.current || timerFinishedRef.current) return;
+      const left = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+      setRemainingSeconds(left);
+      if (left <= 0) {
+        void finishTimerFlow();
+      }
+    }, 400);
+    return () => clearInterval(id);
+  }, [isTimerRunning, finishTimerFlow]);
+
+  const formatTime = (totalSec: number) => {
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const startTimer = async () => {
+    let sec = remainingSeconds;
+    if (sec <= 0) {
+      const parsed = parseInt(timerMinutesInput || `${recipe.cookTime || 20}`, 10);
+      const mins = Number.isFinite(parsed) && parsed > 0 ? parsed : recipe.cookTime || 20;
+      sec = mins * 60;
+      setRemainingSeconds(sec);
+    }
+    timerFinishedRef.current = false;
+    endTimeRef.current = Date.now() + sec * 1000;
+    setIsTimerRunning(true);
+    if (Platform.OS !== 'web') {
+      const perm = await requestNotificationPermissions();
+      if (perm !== 'granted') {
+        alertNotificationDenied();
+      }
+      await scheduleCookingTimerNotification(sec, recipe.name, recipeKey);
+    }
+  };
+
+  const pauseTimer = async () => {
+    if (endTimeRef.current) {
+      const left = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+      setRemainingSeconds(left);
+    }
+    endTimeRef.current = null;
+    setIsTimerRunning(false);
+    await cancelCookingTimerNotification(recipeKey);
+  };
+
+  const resetTimer = async () => {
+    endTimeRef.current = null;
+    setIsTimerRunning(false);
+    const mins = recipe.cookTime || 20;
+    setRemainingSeconds(mins * 60);
+    setTimerMinutesInput(String(mins));
+    await cancelCookingTimerNotification(recipeKey);
+  };
+
+  const toggleStepDone = (index: number) => {
+    setCompletedStepIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      void persistSteps(next);
+      return next;
+    });
+  };
+
+  const onSelectRating = async (stars: number) => {
+    setUserRating(stars);
+    await persistRating(stars);
+    const idNum = parseInt(recipeKey, 10);
+    if (!Number.isNaN(idNum)) {
+      try {
+        // Backend create endpoint mevcut puanı günceller (upsert).
+        await apiService.createRating(idNum, stars);
+      } catch {
+        // offline veya giriş yok — sadece local
+      }
+    }
+  };
+
   useEffect(() => {
     // Fetch recipe from API and track viewing history
     loadRecipeDetails();
     trackHistory(parseInt(recipeId as string));
-    
+
     // Screen fade-in
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 600,
       useNativeDriver: true,
     }).start();
+  }, [recipeId]);
+
+  useEffect(() => {
+    setIsTimerRunning(false);
+    endTimeRef.current = null;
+    timerFinishedRef.current = false;
+    void cancelCookingTimerNotification(String(recipeId));
   }, [recipeId]);
 
   const trackHistory = async (recipeId: number) => {
@@ -373,6 +547,8 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   }
 
+  const timerProgress = Math.max(0, Math.min(1, remainingSeconds / (recipe.cookTime || 20) / 60));
+
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -451,28 +627,103 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         {/* Ingredients Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📋 Malzemeler</Text>
-          {recipe.ingredients.map((ingredient, index) => (
-            <View key={index} style={styles.ingredientItem}>
-              <View style={styles.ingredientDot} />
-              <View style={styles.ingredientContent}>
-                <Text style={styles.ingredientName}>{ingredient.name}</Text>
-                <Text style={styles.ingredientAmount}>{ingredient.amount}</Text>
+          {recipe.ingredients.map((ingredient: any, index: number) => {
+            const isStr = typeof ingredient === 'string';
+            const name = isStr ? ingredient : ingredient?.name ?? '';
+            const amount = isStr ? '' : ingredient?.amount ?? '';
+            return (
+              <View key={index} style={styles.ingredientItem}>
+                <View style={styles.ingredientDot} />
+                <View style={styles.ingredientContent}>
+                  <Text style={styles.ingredientName}>{name}</Text>
+                  {!!amount && <Text style={styles.ingredientAmount}>{amount}</Text>}
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
-        {/* Instructions Section */}
+        {/* --- ESTETİK DAİRESEL ZAMANLAYICI --- */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>👨‍🍳 Hazırlama Talimatları</Text>
-          {recipe.instructions.map((instruction, index) => (
-            <View key={index} style={styles.instructionItem}>
-              <View style={styles.stepNumber}>
-                <Text style={styles.stepNumberText}>{index + 1}</Text>
+          <Text style={styles.sectionTitle}>⏱️ Pişirme Zamanlayıcısı</Text>
+          <View style={styles.clockContainer}>
+            <View style={styles.clockOuterRing}>
+              <View style={[styles.clockProgress, { height: `${timerProgress * 100}%` }]} />
+              <View style={styles.clockInnerCircle}>
+                <Text style={styles.timerDisplay}>{formatTime(remainingSeconds)}</Text>
+                <View style={styles.timerInputWrapper}>
+                  <TextInput
+                    style={styles.timerInputMinimal}
+                    keyboardType="number-pad"
+                    editable={!isTimerRunning}
+                    value={timerMinutesInput}
+                    onChangeText={setTimerMinutesInput}
+                    placeholder="00"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                  <Text style={styles.minLabel}>dk</Text>
+                </View>
               </View>
-              <Text style={styles.instructionText}>{instruction}</Text>
             </View>
-          ))}
+            <View style={styles.timerControlRow}>
+              <TouchableOpacity 
+                style={[styles.timerCircleBtn, isTimerRunning ? styles.pauseBtn : styles.startBtn]} 
+                onPress={isTimerRunning ? pauseTimer : startTimer}
+              >
+                <Text style={styles.timerBtnIcon}>{isTimerRunning ? '⏸' : '▶'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.timerCircleBtnSecondary} onPress={resetTimer}>
+                <Text style={styles.timerBtnIconSmall}>🔄</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Instructions Section — interactive checklist */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>👨‍🍳 Adım adım talimatlar</Text>
+          {recipe.instructions.length > 0 ? (
+            <>
+              <View style={styles.progressBarOuter}>
+                <View
+                  style={[
+                    styles.progressBarInner,
+                    {
+                      width: `${Math.round(
+                        (Array.from(completedStepIndices).filter((i) => i < recipe.instructions.length).length /
+                          recipe.instructions.length) *
+                          100
+                      )}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.progressLabel}>
+                İlerleme:{' '}
+                {Array.from(completedStepIndices).filter((i) => i < recipe.instructions.length).length} /{' '}
+                {recipe.instructions.length}
+              </Text>
+            </>
+          ) : null}
+          {recipe.instructions.map((instruction: string, index: number) => {
+            const done = completedStepIndices.has(index);
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[styles.instructionRow, done && styles.instructionRowDone]}
+                onPress={() => toggleStepDone(index)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.stepCheck, done && styles.stepCheckDone]}>
+                  <Text style={styles.stepCheckMark}>{done ? '✓' : ''}</Text>
+                </View>
+                <View style={styles.stepNumberSmall}>
+                  <Text style={styles.stepNumberSmallText}>{index + 1}</Text>
+                </View>
+                <Text style={[styles.instructionText, done && styles.instructionTextDone]}>{instruction}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Tips Section */}
@@ -512,19 +763,28 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           </View>
         </View>
 
-        {/* Review Section */}
+        {/* Review Section — local 1–5 stars */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>⭐ Değerlendir</Text>
-          <LinearGradient
-            colors={['#10B981', '#059669']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.ratingButtonGradient}
-          >
-            <TouchableOpacity style={styles.ratingButton}>
-              <Text style={styles.ratingButtonText}>Tarifte Puan Ver</Text>
-            </TouchableOpacity>
-          </LinearGradient>
+          <Text style={styles.sectionTitle}>⭐ Tarifini değerlendir</Text>
+          <Text style={styles.ratingSubtext}>
+            1–5 yıldız; tarif başına bir puan (istediğin zaman değiştirebilirsin). Cihazında saklanır.
+          </Text>
+          <View style={styles.starsRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity key={star} onPress={() => onSelectRating(star)} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                <Text style={[styles.starGlyph, userRating && star <= userRating ? styles.starActive : styles.starInactive]}>
+                  ★
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {userRating ? (
+            <Text style={styles.ratingSummary}>
+              Senin puanın: {userRating}/5 {userRating >= 4 ? '— Harika!' : userRating <= 2 ? '— Not aldık, geliştireceğiz.' : ''}
+            </Text>
+          ) : (
+            <Text style={styles.ratingSummaryMuted}>Henüz puan vermedin.</Text>
+          )}
         </View>
       </ScrollView>
     </Animated.View>
@@ -731,6 +991,159 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 22,
   },
+  timerCard: {
+    backgroundColor: '#ecfdf5',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+  },
+  timerHint: {
+    fontSize: 13,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  timerInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    marginBottom: 12,
+  },
+  timerButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  timerBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  timerBtnPrimary: {
+    backgroundColor: '#10B981',
+  },
+  timerBtnSecondary: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  timerBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  timerBtnTextDark: {
+    color: '#374151',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  progressBarOuter: {
+    height: 8,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressBarInner: {
+    height: 8,
+    backgroundColor: '#10B981',
+    borderRadius: 4,
+  },
+  progressLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 12,
+    fontWeight: '600',
+  },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  instructionRowDone: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+  },
+  stepCheck: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  stepCheckDone: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  stepCheckMark: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  stepNumberSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  stepNumberSmallText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  instructionTextDone: {
+    color: '#059669',
+    textDecorationLine: 'line-through',
+  },
+  ratingSubtext: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  starGlyph: {
+    fontSize: 36,
+  },
+  starActive: {
+    color: '#f59e0b',
+  },
+  starInactive: {
+    color: '#e5e7eb',
+  },
+  ratingSummary: {
+    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#047857',
+  },
+  ratingSummaryMuted: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#9ca3af',
+  },
   tipCard: {
     backgroundColor: '#fef3c7',
     borderRadius: 12,
@@ -832,5 +1245,124 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontWeight: '600',
     textAlign: 'center',
+  },
+  // --- YENİ SAAT TASARIMI STİLLERİ ---
+  clockContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 24,
+    padding: 30,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 20,
+  },
+  clockOuterRing: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 6,
+    borderColor: '#ffffff',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  clockProgress: {
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
+    backgroundColor: '#10B981',
+    opacity: 0.15,
+  },
+  clockInnerCircle: {
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    elevation: 1,
+  },
+  timerDisplay: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: '#1e293b',
+    ...Platform.select({ ios: { fontVariant: ['tabular-nums'] } }), // Sayıların kaymasını engeller
+  },
+  timerInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: -5,
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  timerInputMinimal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#64748b',
+    textAlign: 'center',
+    padding: 0,
+    minWidth: 30,
+  },
+  minLabel: {
+    fontSize: 14,
+    color: '#94a3b8',
+    marginLeft: 2,
+    fontWeight: '600',
+  },
+  timerControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 25,
+    gap: 20,
+  },
+  timerCircleBtn: {
+    width: 65,
+    height: 65,
+    borderRadius: 33,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+  },
+  startBtn: {
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+  },
+  pauseBtn: {
+    backgroundColor: '#f59e0b',
+    shadowColor: '#f59e0b',
+  },
+  timerCircleBtnSecondary: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+  },
+  timerBtnIcon: {
+    fontSize: 28,
+    color: '#ffffff',
+    marginLeft: 3, // Play ikonu tam ortalı dursun diye
+  },
+  timerBtnIconSmall: {
+    fontSize: 18,
   },
 });

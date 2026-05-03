@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.database.engine import engine
 from app.database.base import Base
-from app.routes import auth, recipes, favorites, ratings, shopping, history, weekly, users
+from app.routes import auth, recipes, favorites, ratings, shopping, history, weekly, users, notifications
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -21,7 +21,7 @@ app = FastAPI(
 # Add CORS middleware FIRST (before everything else)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8081", "http://localhost:3000", "http://127.0.0.1:8081", "*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -86,4 +86,9 @@ app.include_router(
     weekly.router,
     prefix=api_v1_prefix,
     tags=["weekly-menu"]
+)
+app.include_router(
+    notifications.router,
+    prefix=api_v1_prefix,
+    tags=["notifications"]
 )

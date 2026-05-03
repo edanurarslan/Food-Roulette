@@ -21,6 +21,8 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expo_push_token = Column(Text, nullable=True)
+    push_platform = Column(String(20), nullable=True)
     
     # Relationships
     recipes = relationship("Recipe", back_populates="creator", foreign_keys="Recipe.created_by", cascade="all, delete-orphan")

@@ -1,11 +1,11 @@
 """Users routes for profile management"""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from uuid import UUID
 from app.database.engine import get_db
 from app.models.models import User
-from app.schemas.schemas import UserResponse, UserUpdate, PasswordUpdate
+from app.schemas.schemas import UserResponse, UserUpdate, PasswordUpdate, ExpoPushTokenRegister
 from app.core.auth import hash_password, verify_password, verify_token
 from app.routes.auth import get_current_user
 
@@ -118,6 +118,25 @@ async def change_password(
     db.commit()
     
     return {"message": "Password changed successfully"}
+
+
+@router.post("/push-token", status_code=status.HTTP_204_NO_CONTENT)
+async def register_push_token(
+    body: ExpoPushTokenRegister,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Save Expo push token for remote notifications (timer/marketing hooks)."""
+    user = db.query(User).filter(User.id == UUID(user_id)).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    user.expo_push_token = body.expo_push_token
+    user.push_platform = body.platform
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/account")

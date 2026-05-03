@@ -251,6 +251,7 @@ export const WeeklyMenuScreen: React.FC<Props> = ({ navigation }) => {
             data={recipes}
             renderItem={({ item }) => (
               <TouchableOpacity
+                key={item.id}
                 style={styles.recipeOption}
                 onPress={() => assignRecipeToMeal(item.id, selectedMealType!)}
               >

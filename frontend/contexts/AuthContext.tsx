@@ -1,10 +1,31 @@
 /**
- * AuthContext - Global Authentication State Management
+ * AuthContext - Global Authentication State Management (Simplified)
  */
 
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios, { AxiosInstance } from 'axios';
+import { Platform } from 'react-native';
+
+// .env okuyamazsa çökmek yerine senin IP adresini yedek olarak kullanacak
+const getApiUrl = () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  // MAC IP ADRESİ: 172.20.10.4
+  const fallbackUrl = 'http://172.20.10.4:8000/api/v1';
+  const webFallbackUrl = 'http://localhost:8000/api/v1';
+
+  const isPrivateIpUrl = (url: string) =>
+    /https?:\/\/(10\.|127\.|172\.(1[6-9]|2\d|3[0-1])\.|192\.168\.)/.test(url);
+
+  // Web'de private IP erişimi çoğu kullanıcıda sorun çıkarıyor; localhost daha güvenli.
+  const finalUrl =
+    Platform.OS === 'web'
+      ? envUrl && !isPrivateIpUrl(envUrl)
+        ? envUrl
+        : webFallbackUrl
+      : envUrl || fallbackUrl;
+  // Sonunda fazladan / varsa temizle
+  return finalUrl.endsWith('/') ? finalUrl.slice(0, -1) : finalUrl;
+};
 
 // Types
 export interface User {
@@ -29,11 +50,58 @@ export interface AuthContextType {
 // Create Context
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// API instance
-const api: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
-  timeout: 10000,
-});
+// Helper function for API calls
+async function apiCall(endpoint: string, method: string = 'GET', body?: any, token?: string | null) {
+  const headers: any = {
+    'Content-Type': 'application/json',
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const options: any = {
+    method,
+    headers,
+  };
+
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+
+  // URL'leri güvenli bir şekilde birleştir
+  const baseUrl = getApiUrl();
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const fullUrl = `${baseUrl}${cleanEndpoint}`;
+
+  console.log(`🚀 API İSTEĞİ: ${method} ${fullUrl}`); // Terminalde tam adresi göreceğiz
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(fullUrl, {
+      ...options,
+      signal: controller.signal,
+    });
+    
+    if (!response.ok) {
+      // Hatanın detayını terminale yazdır
+      const errorText = await response.text();
+      console.log(`❌ API HATASI (${response.status}):`, errorText);
+      throw new Error(`API Error: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Sunucuya ulaşılamadı (timeout). API URL ve backend çalışmasını kontrol et.');
+    }
+    console.log(`💥 NETWORK HATASI:`, error);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 // Provider Component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -43,7 +111,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     token: null as string | null,
   });
 
-  // Uygulama başladığında token'ı kontrol et
+  // Check token on app start
   useEffect(() => {
     let isMounted = true;
 
@@ -52,15 +120,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const savedToken = await AsyncStorage.getItem('userToken');
 
         if (savedToken && isMounted) {
-          api.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
-
           try {
-            const response = await api.get('/auth/me');
+            const response = await apiCall('/auth/me', 'GET', undefined, savedToken);
             if (isMounted) {
               dispatch({
                 isLoading: false,
                 token: savedToken,
-                user: response.data,
+                user: response,
               });
             }
           } catch (error) {
@@ -100,92 +166,87 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, []);
 
-  // Login Function
-  const login = async (email: string, password: string): Promise<void> => {
+  // Login function
+  const login = async (email: string, password: string) => {
+    dispatch({ isLoading: true, user: state.user, token: state.token });
+
     try {
-      const response = await api.post('/auth/login', {
+      const response = await apiCall('/auth/login', 'POST', {
         username: email,
         password,
       });
 
-      const { access_token } = response.data;
-
-      // Token'ı kaydet
+      const { access_token } = response;
       await AsyncStorage.setItem('userToken', access_token);
-      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
-      // User bilgisini al
-      const userResponse = await api.get('/auth/me');
-
-      dispatch({
-        isLoading: false,
-        token: access_token,
-        user: userResponse.data,
-      });
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Login başarısız';
-      throw new Error(message);
+      try {
+        const userResponse = await apiCall('/auth/me', 'GET', undefined, access_token);
+        dispatch({
+          isLoading: false,
+          token: access_token,
+          user: userResponse,
+        });
+      } catch (error) {
+        throw error;
+      }
+    } catch (error) {
+      dispatch({ isLoading: false, user: null, token: null });
+      throw error;
     }
   };
 
-  // Register Function
-  const register = async (
-    username: string,
-    email: string,
-    password: string
-  ): Promise<void> => {
+  // Register function
+  const register = async (username: string, email: string, password: string) => {
+    dispatch({ isLoading: true, user: state.user, token: state.token });
+
     try {
-      await api.post('/auth/register', {
+      await apiCall('/auth/register', 'POST', {
         username,
         email,
         password,
       });
 
-      // Otomatik login yap
-      const loginResponse = await api.post('/auth/login', {
+      const loginResponse = await apiCall('/auth/login', 'POST', {
         username: email,
         password,
       });
 
-      const { access_token } = loginResponse.data;
-
-      // Token'ı kaydet
+      const { access_token } = loginResponse;
       await AsyncStorage.setItem('userToken', access_token);
-      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
-      // User bilgisini al
-      const userResponse = await api.get('/auth/me');
+      const userResponse = await apiCall('/auth/me', 'GET', undefined, access_token);
 
       dispatch({
         isLoading: false,
         token: access_token,
-        user: userResponse.data,
+        user: userResponse,
       });
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Registration başarısız';
-      throw new Error(message);
+    } catch (error) {
+      dispatch({ isLoading: false, user: null, token: null });
+      throw error;
     }
   };
 
-  // Logout Function
-  const logout = async (): Promise<void> => {
+  // Logout function
+  const logout = async () => {
+    dispatch({ isLoading: true, user: state.user, token: state.token });
+
     try {
-      await AsyncStorage.removeItem('userToken');
-      delete api.defaults.headers.common['Authorization'];
-      dispatch({
-        isLoading: false,
-        user: null,
-        token: null,
-      });
+      await apiCall('/auth/logout', 'POST', {}, state.token);
     } catch (error) {
       console.error('Logout error:', error);
     }
+
+    await AsyncStorage.removeItem('userToken');
+    dispatch({
+      isLoading: false,
+      user: null,
+      token: null,
+    });
   };
 
-  const value: AuthContextType = {
-    user: state.user,
-    token: state.token,
-    isLoading: state.isLoading,
+  const value = {
+    ...state,
     login,
     register,
     logout,
@@ -194,10 +255,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Hook
-export const useAuth = (): AuthContextType => {
+// Custom hook to use the auth context
+export const useAuth = () => {
   const context = React.useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;

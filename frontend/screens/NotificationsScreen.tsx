@@ -2,7 +2,7 @@
  * NotificationsScreen - Bildirim Ayarları Ekranı
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,9 +11,22 @@ import {
   TouchableOpacity,
   Animated,
   Switch,
+  Alert,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../contexts/AuthContext';
+import { apiService } from '../services/api';
+import {
+  NOTIF_PREF_PUSH,
+  NOTIF_PREF_EMAIL,
+  NOTIF_PREF_RECIPE,
+  NOTIF_PREF_FAVORITE,
+  getNotificationPermissionStatus,
+  requestNotificationPermissions,
+} from '../services/notifications';
 
 type RootStackParamList = {
   ProfileMain: undefined;
@@ -28,11 +41,24 @@ type RootStackParamList = {
 type Props = NativeStackScreenProps<RootStackParamList, 'Notifications'>;
 
 export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
+  const { token } = useAuth();
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [recipeNotifications, setRecipeNotifications] = useState(true);
   const [favoriteNotifications, setFavoriteNotifications] = useState(true);
+  const [permLabel, setPermLabel] = useState<string>('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const refreshPermission = useCallback(async () => {
+    const p = await getNotificationPermissionStatus();
+    const map: Record<string, string> = {
+      granted: 'Bildirim izni: verildi',
+      denied: 'Bildirim izni: reddedildi (Ayarlardan açabilirsin)',
+      undetermined: 'Bildirim izni: henüz sorulmadı',
+      unavailable: Platform.OS === 'web' ? 'Web’de push sınırlıdır' : 'Kullanılamıyor',
+    };
+    setPermLabel(map[p] ?? '');
+  }, []);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -40,7 +66,63 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [fadeAnim]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [a, b, c, d] = await Promise.all([
+          AsyncStorage.getItem(NOTIF_PREF_PUSH),
+          AsyncStorage.getItem(NOTIF_PREF_EMAIL),
+          AsyncStorage.getItem(NOTIF_PREF_RECIPE),
+          AsyncStorage.getItem(NOTIF_PREF_FAVORITE),
+        ]);
+        if (a !== null) setPushNotifications(a === 'true');
+        if (b !== null) setEmailNotifications(b === 'true');
+        if (c !== null) setRecipeNotifications(c === 'true');
+        if (d !== null) setFavoriteNotifications(d === 'true');
+      } catch {
+        // ignore
+      }
+      await refreshPermission();
+    })();
+  }, [refreshPermission]);
+
+  const persist = async (key: string, value: boolean) => {
+    try {
+      await AsyncStorage.setItem(key, value ? 'true' : 'false');
+    } catch {
+      // ignore
+    }
+  };
+
+  const onPushChange = async (v: boolean) => {
+    setPushNotifications(v);
+    await persist(NOTIF_PREF_PUSH, v);
+    if (v && Platform.OS !== 'web') {
+      const p = await requestNotificationPermissions();
+      await refreshPermission();
+      if (p !== 'granted') {
+        Alert.alert(
+          'İzin gerekli',
+          'Push bildirimleri için sistem bildirim iznine ihtiyaç var.'
+        );
+      }
+    }
+  };
+
+  const handleTestPush = async () => {
+    if (!token) {
+      Alert.alert('Giriş gerekli', 'Test push için önce giriş yap.');
+      return;
+    }
+    try {
+      await apiService.sendSelfPushNotification('Food Roulette', 'Test bildirimi — push altyapısı çalışıyor.');
+      Alert.alert('Gönderildi', 'Sunucu Expo Push üzerinden bildirimi iletti (token kayıtlıysa cihazda görünür).');
+    } catch {
+      Alert.alert('Hata', 'Push gönderilemedi. Token kaydı ve ağ bağlantısını kontrol et.');
+    }
+  };
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -57,19 +139,23 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {!!permLabel && (
+          <View style={styles.permBanner}>
+            <Text style={styles.permBannerText}>{permLabel}</Text>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🔔 Genel Ayarlar</Text>
 
           <View style={styles.notificationCard}>
             <View style={styles.notificationContent}>
               <Text style={styles.notificationTitle}>Push Bildirimleri</Text>
-              <Text style={styles.notificationDesc}>
-                Uygulama bildirimleri al
-              </Text>
+              <Text style={styles.notificationDesc}>Uygulama bildirimleri al</Text>
             </View>
             <Switch
               value={pushNotifications}
-              onValueChange={setPushNotifications}
+              onValueChange={onPushChange}
               trackColor={{ false: '#ddd', true: '#10B981' }}
               thumbColor="#FFF"
             />
@@ -78,13 +164,14 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.notificationCard}>
             <View style={styles.notificationContent}>
               <Text style={styles.notificationTitle}>Email Bildirimleri</Text>
-              <Text style={styles.notificationDesc}>
-                Email ile bildir
-              </Text>
+              <Text style={styles.notificationDesc}>Email ile bildir (gelecek özellik)</Text>
             </View>
             <Switch
               value={emailNotifications}
-              onValueChange={setEmailNotifications}
+              onValueChange={async (v) => {
+                setEmailNotifications(v);
+                await persist(NOTIF_PREF_EMAIL, v);
+              }}
               trackColor={{ false: '#ddd', true: '#10B981' }}
               thumbColor="#FFF"
             />
@@ -97,13 +184,14 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.notificationCard}>
             <View style={styles.notificationContent}>
               <Text style={styles.notificationTitle}>Yeni Tarifler</Text>
-              <Text style={styles.notificationDesc}>
-                Yeni tarifler eklendiğinde haberdar ol
-              </Text>
+              <Text style={styles.notificationDesc}>Yeni tarifler eklendiğinde (gelecek)</Text>
             </View>
             <Switch
               value={recipeNotifications}
-              onValueChange={setRecipeNotifications}
+              onValueChange={async (v) => {
+                setRecipeNotifications(v);
+                await persist(NOTIF_PREF_RECIPE, v);
+              }}
               trackColor={{ false: '#ddd', true: '#10B981' }}
               thumbColor="#FFF"
             />
@@ -112,22 +200,30 @@ export const NotificationsScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.notificationCard}>
             <View style={styles.notificationContent}>
               <Text style={styles.notificationTitle}>Favori Tarifler</Text>
-              <Text style={styles.notificationDesc}>
-                Favori tarifleriniz hakkında haberdar ol
-              </Text>
+              <Text style={styles.notificationDesc}>Favorilerin hakkında (gelecek)</Text>
             </View>
             <Switch
               value={favoriteNotifications}
-              onValueChange={setFavoriteNotifications}
+              onValueChange={async (v) => {
+                setFavoriteNotifications(v);
+                await persist(NOTIF_PREF_FAVORITE, v);
+              }}
               trackColor={{ false: '#ddd', true: '#10B981' }}
               thumbColor="#FFF"
             />
           </View>
         </View>
 
+        {Platform.OS !== 'web' && (
+          <TouchableOpacity style={styles.testButton} onPress={handleTestPush}>
+            <Text style={styles.testButtonText}>Sunucudan test push gönder</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
-            💡 Bildirim ayarlarınız otomatik olarak kaydedilecektir.
+            💡 Push tercihi AsyncStorage’da saklanır; açıkken giriş yaptıktan sonra Expo token backend’e kaydedilir.
+            Pişirme zamanlayıcısı yerel bildirim de kullanır.
           </Text>
         </View>
       </ScrollView>
@@ -159,6 +255,19 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingVertical: 24,
+  },
+  permBanner: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3b82f6',
+  },
+  permBannerText: {
+    fontSize: 13,
+    color: '#1e40af',
+    fontWeight: '600',
   },
   section: {
     marginBottom: 28,
@@ -200,6 +309,18 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontWeight: '500',
   },
+  testButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  testButtonText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 15,
+  },
   infoBox: {
     backgroundColor: '#f0fdf4',
     borderRadius: 12,
@@ -207,7 +328,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderLeftWidth: 4,
     borderLeftColor: '#10B981',
-    marginTop: 24,
+    marginTop: 8,
   },
   infoText: {
     fontSize: 14,

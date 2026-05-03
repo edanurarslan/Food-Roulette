@@ -1,3 +1,6 @@
 {
-  "ignore_dirs": ["node_modules", ".git", "dist", "build", ".expo", ".next"]
+  "ignore_dirs": ["node_modules", ".git", "dist", "build", ".expo", ".next", "__pycache__", ".venv", "coverage", ".pytest_cache", "*.egg-info"],
+  "gc_age_seconds": 60,
+  "settle": 200,
+  "timeout": 120000
 }
