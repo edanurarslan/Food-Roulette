@@ -251,6 +251,7 @@ class ApiService {
       friday_recipe_id?: number;
       saturday_recipe_id?: number;
       sunday_recipe_id?: number;
+      menu_data?: any[];
     }
   ) {
     const response = await this.api.post('/weekly-menu', {
@@ -322,6 +323,26 @@ class ApiService {
       recipe_id: recipeId,
     });
     return response.data;
+  }
+
+  async getSuggestedRecipes(limit: number = 4): Promise<any[]> {
+    try {
+      // Get recipes from backend for variety
+      const allRecipes = await this.getRecipes(undefined, undefined, 0, 100).catch(() => []);
+      const recipeArray = Array.isArray(allRecipes) ? allRecipes : [];
+
+      if (recipeArray.length === 0) return [];
+
+      // Shuffle and select diverse recipes
+      const shuffled = recipeArray.sort(() => Math.random() - 0.5);
+      const suggested = shuffled.slice(0, limit);
+
+      console.log(`✨ ${suggested.length} çeşitli tarif önerisi yüklendi:`, suggested.map(r => r.name));
+      return suggested;
+    } catch (error) {
+      console.error('Öneriler yüklenirken hata:', error);
+      return [];
+    }
   }
 }
 

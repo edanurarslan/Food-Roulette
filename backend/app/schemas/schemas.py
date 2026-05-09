@@ -163,7 +163,6 @@ class HistoryResponse(BaseModel):
 # ===== RATING SCHEMAS =====
 class RatingCreate(BaseModel):
     """Rating creation schema"""
-    recipe_id: int
     rating: int = Field(..., ge=1, le=5)
     review: Optional[str] = None
 
@@ -235,6 +234,7 @@ class WeeklyMenuCreate(BaseModel):
     friday_recipe: Optional[int] = None
     saturday_recipe: Optional[int] = None
     sunday_recipe: Optional[int] = None
+    menu_data: Optional[List[dict]] = None
 
 
 class WeeklyMenuUpdate(BaseModel):
@@ -246,6 +246,7 @@ class WeeklyMenuUpdate(BaseModel):
     friday_recipe: Optional[int] = None
     saturday_recipe: Optional[int] = None
     sunday_recipe: Optional[int] = None
+    menu_data: Optional[List[dict]] = None
 
 
 class WeeklyMenuResponse(BaseModel):
@@ -260,6 +261,7 @@ class WeeklyMenuResponse(BaseModel):
     friday_recipe: Optional[int] = None
     saturday_recipe: Optional[int] = None
     sunday_recipe: Optional[int] = None
+    menu_data: Optional[List[dict]] = None
     created_at: datetime
     updated_at: datetime
     

@@ -97,26 +97,30 @@ export const WeeklyMenuScreen: React.FC<Props> = ({ navigation }) => {
       const backendMenu = await apiService.getWeeklyMenu(weekStart).catch(() => null);
       
       if (backendMenu) {
-        // Convert backend format to frontend format
-        // Backend stores recipe_ids, we need to map them to actual recipes
-        const week: DailyMenu[] = [];
-        for (let i = 0; i < 7; i++) {
-          const date = new Date(currentWeekStart);
-          date.setDate(date.getDate() + i);
-          const recipeField = `${DAYS[i].toLowerCase()}_recipe_id`;
-          const recipeId = (backendMenu as any)[recipeField];
-          const recipe = recipes.find(r => r.id === recipeId) || null;
-          
-          week.push({
-            day: DAYS[i],
-            date: date.toISOString().split('T')[0],
-            breakfast: null, // Backend needs to store meal_type separately
-            lunch: null,
-            dinner: null,
-          });
+        if (backendMenu.menu_data && Array.isArray(backendMenu.menu_data)) {
+          setWeeklyMenu(backendMenu.menu_data);
+          await AsyncStorage.setItem('weeklyMenu', JSON.stringify(backendMenu.menu_data));
+        } else {
+          // Fallback to legacy single-recipe fields
+          const week: DailyMenu[] = [];
+          for (let i = 0; i < 7; i++) {
+            const date = new Date(currentWeekStart);
+            date.setDate(date.getDate() + i);
+            const recipeField = `${DAYS[i].toLowerCase()}_recipe`; // Adjusted from _recipe_id based on schema
+            const recipeId = (backendMenu as any)[recipeField];
+            const recipe = recipes.find(r => r.id === recipeId) || null;
+            
+            week.push({
+              day: DAYS[i],
+              date: date.toISOString().split('T')[0],
+              breakfast: null,
+              lunch: null,
+              dinner: recipe, // Use the only available slot
+            });
+          }
+          setWeeklyMenu(week);
+          await AsyncStorage.setItem('weeklyMenu', JSON.stringify(week));
         }
-        setWeeklyMenu(week);
-        await AsyncStorage.setItem('weeklyMenu', JSON.stringify(week));
       } else {
         // Fallback to AsyncStorage or create new week
         const data = await AsyncStorage.getItem('weeklyMenu');
@@ -189,15 +193,20 @@ export const WeeklyMenuScreen: React.FC<Props> = ({ navigation }) => {
       // Map meals to recipe IDs for each day
       menu.forEach((day, idx) => {
         const dayName = DAYS[idx].toLowerCase();
-        // For now, we'll use the first meal's recipe (backend structure needs meal_type support)
+        // For legacy support
         const recipeId = (day.breakfast?.id || day.lunch?.id || day.dinner?.id) || null;
-        menuData[`${dayName}_recipe_id`] = recipeId;
+        menuData[`${dayName}_recipe`] = recipeId;
       });
+      
+      // Store full JSON data
+      menuData.menu_data = menu;
       
       await apiService.createWeeklyMenu(weekStart, menuData).catch((error) => {
         console.warn('Backend kaydedilirken hata, sadece local\'da kaydedildi:', error);
+        throw error;
       });
       
+      Alert.alert('Başarılı', 'Haftalık menü kaydedildi!');
       console.log('✅ Haftalık menu kaydedildi');
     } catch (error) {
       console.error('Kaydetme hatası:', error);
@@ -212,7 +221,6 @@ export const WeeklyMenuScreen: React.FC<Props> = ({ navigation }) => {
     if (selectedDay !== null) {
       (updated[selectedDay] as any)[mealType] = recipe;
       setWeeklyMenu(updated);
-      saveWeeklyMenu(updated);
       setShowRecipeModal(false);
       setSelectedMealType(null);
       console.log(`✓ ${recipe.name} - ${DAYS[selectedDay]} ${MEAL_LABELS[mealType]}'a atandı`);
@@ -225,7 +233,6 @@ export const WeeklyMenuScreen: React.FC<Props> = ({ navigation }) => {
     
     (updated[dayIndex] as any)[mealType] = null;
     setWeeklyMenu(updated);
-    saveWeeklyMenu(updated);
     console.log(`🗑️ ${mealName} kaldırıldı`);
   };
 
@@ -378,8 +385,26 @@ export const WeeklyMenuScreen: React.FC<Props> = ({ navigation }) => {
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        <Text style={styles.headerTitle}>📅 Haftalık Menu</Text>
-        <Text style={styles.headerSubtitle}>Tara ve sürükle ile öğünleri düzenle</Text>
+        <View style={styles.headerContent}>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>📅 Haftalık Menu</Text>
+            <Text style={styles.headerSubtitle}>Öğünleri düzenle ve kaydet</Text>
+          </View>
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.backButtonText}>🛒 Dön</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.saveButton}
+              onPress={() => saveWeeklyMenu(weeklyMenu)}
+            >
+              <Text style={styles.saveButtonText}>Kaydet</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </LinearGradient>
 
       {/* DEBUG: Show current state */}
@@ -425,16 +450,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
   },
+  headerContent: {
+    width: '100%',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerTextContainer: {
+    alignItems: 'center',
+  },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '800',
     color: '#FFF',
-    marginBottom: 6,
+    marginBottom: 4,
+    textAlign: 'center',
   },
   headerSubtitle: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.9)',
     fontWeight: '500',
+    textAlign: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  backButtonText: {
+    color: '#FFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  saveButton: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    elevation: 3,
+  },
+  saveButtonText: {
+    color: '#10B981',
+    fontWeight: '700',
+    fontSize: 14,
   },
   loadingContainer: {
     flex: 1,

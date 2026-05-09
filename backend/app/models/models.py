@@ -181,6 +181,7 @@ class WeeklyMenu(Base):
     friday_recipe = Column(Integer, ForeignKey("recipes.id", ondelete="SET NULL"))
     saturday_recipe = Column(Integer, ForeignKey("recipes.id", ondelete="SET NULL"))
     sunday_recipe = Column(Integer, ForeignKey("recipes.id", ondelete="SET NULL"))
+    menu_data = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

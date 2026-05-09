@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   FlatList,
   Alert,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -107,78 +108,112 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleRemoveFromHistory = async (recipeId: number, recipeName: string) => {
-    Alert.alert(
-      'Geçmişten Sil',
-      `"${recipeName}" geçmişten silinsin mi?`,
-      [
-        { text: 'İptal', onPress: () => {} },
-        {
-          text: 'Sil',
-          onPress: async () => {
-            try {
-              // Remove from LocalStorage
-              const historyData = await AsyncStorage.getItem('history');
-              const historyItems: HistoryItem[] = historyData ? JSON.parse(historyData) : [];
-              const updated = historyItems.filter(h => h.recipeId !== recipeId);
-              await AsyncStorage.setItem('history', JSON.stringify(updated));
-              
-              // Update state - history'den kaldır
-              const updatedHistory = history.filter(h => h.id !== recipeId);
-              setHistory(updatedHistory);
-              
-              console.log(`Recipe removed: ${recipeName}. Remaining: ${updatedHistory.length} items`);
-              Alert.alert('Başarılı', `${recipeName} geçmişten silindi`);
-            } catch (error) {
-              Alert.alert('Hata', 'Geçmişten silinirken hata oluştu');
-              console.error('Remove from history error:', error);
-            }
+    const performDelete = async () => {
+      try {
+        // Remove from LocalStorage
+        const historyData = await AsyncStorage.getItem('history');
+        const historyItems: HistoryItem[] = historyData ? JSON.parse(historyData) : [];
+        const updated = historyItems.filter(h => h.recipeId !== recipeId);
+        await AsyncStorage.setItem('history', JSON.stringify(updated));
+        
+        // Update state - history'den kaldır
+        const updatedHistory = history.filter(h => h.id !== recipeId);
+        setHistory(updatedHistory);
+        
+        console.log(`Recipe removed: ${recipeName}. Remaining: ${updatedHistory.length} items`);
+        if (Platform.OS === 'web') {
+          window.alert(`${recipeName} geçmişten silindi`);
+        } else {
+          Alert.alert('Başarılı', `${recipeName} geçmişten silindi`);
+        }
+      } catch (error) {
+        if (Platform.OS === 'web') {
+          window.alert('Geçmişten silinirken hata oluştu');
+        } else {
+          Alert.alert('Hata', 'Geçmişten silinirken hata oluştu');
+        }
+        console.error('Remove from history error:', error);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`"${recipeName}" geçmişten silinsin mi?`)) {
+        performDelete();
+      }
+    } else {
+      Alert.alert(
+        'Geçmişten Sil',
+        `"${recipeName}" geçmişten silinsin mi?`,
+        [
+          { text: 'İptal', onPress: () => {} },
+          {
+            text: 'Sil',
+            onPress: performDelete,
+            style: 'destructive',
           },
-          style: 'destructive',
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleClearHistory = () => {
-    console.log('handleClearHistory called - Alert will be shown');
-    Alert.alert(
-      'Tüm Geçmişi Sil',
-      'Bütün tarih kaydları silinecek. Emin misiniz?',
-      [
-        { text: 'İptal', onPress: () => { console.log('Clear canceled'); } },
-        {
-          text: 'Sil',
-          onPress: async () => {
-            console.log('Clear confirmed - Starting deletion process');
-            try {
-              // 1. AsyncStorage'den sil
-              await AsyncStorage.removeItem('history');
-              console.log('History cleared from AsyncStorage');
-              
-              // 2. State'i güncelle
-              setHistory([]);
-              console.log('State updated - history set to empty array');
-              
-              // 3. Backend'de clear history endpoint'i varsa çağır
-              try {
-                await apiService.clearHistory();
-                console.log('Backend history cleared');
-              } catch (apiError) {
-                console.log('Backend clear history not available or failed:', apiError);
-                // Backend sonucu başarısız olsa da local geçmiş silinmiş
-              }
-              
-              // 4. Success mesajı göster
-              Alert.alert('Başarılı', 'Tüm geçmiş silindi');
-            } catch (error) {
-              console.error('Clear history error:', error);
-              Alert.alert('Hata', 'Geçmiş silinirken hata oluştu');
-            }
+    console.log('handleClearHistory called');
+    const performClear = async () => {
+      console.log('Clear confirmed - Starting deletion process');
+      try {
+        // 1. AsyncStorage'den sil
+        await AsyncStorage.removeItem('history');
+        console.log('History cleared from AsyncStorage');
+        
+        // 2. State'i güncelle
+        setHistory([]);
+        console.log('State updated - history set to empty array');
+        
+        // 3. Backend'de clear history endpoint'i varsa çağır
+        try {
+          await apiService.clearHistory();
+          console.log('Backend history cleared');
+        } catch (apiError) {
+          console.log('Backend clear history not available or failed:', apiError);
+          // Backend sonucu başarısız olsa da local geçmiş silinmiş
+        }
+        
+        // 4. Success mesajı göster
+        if (Platform.OS === 'web') {
+          window.alert('Tüm geçmiş silindi');
+        } else {
+          Alert.alert('Başarılı', 'Tüm geçmiş silindi');
+        }
+      } catch (error) {
+        console.error('Clear history error:', error);
+        if (Platform.OS === 'web') {
+          window.alert('Geçmiş silinirken hata oluştu');
+        } else {
+          Alert.alert('Hata', 'Geçmiş silinirken hata oluştu');
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Bütün tarih kaydları silinecek. Emin misiniz?')) {
+        performClear();
+      } else {
+        console.log('Clear canceled');
+      }
+    } else {
+      Alert.alert(
+        'Tüm Geçmişi Sil',
+        'Bütün tarih kaydları silinecek. Emin misiniz?',
+        [
+          { text: 'İptal', onPress: () => { console.log('Clear canceled'); } },
+          {
+            text: 'Sil',
+            onPress: performClear,
+            style: 'destructive',
           },
-          style: 'destructive',
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleRecipePress = (recipe: HistoryRecipe) => {

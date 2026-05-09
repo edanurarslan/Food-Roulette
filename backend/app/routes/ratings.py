@@ -25,14 +25,20 @@ async def create_rating(
     - **rating**: Rating value (1-5)
     - **review**: Optional review text
     """
-    user_id = UUID(current_user_id)
+    try:
+        user_id = UUID(current_user_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid user ID format"
+        )
     
     # Check if recipe exists
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recipe not found"
+            detail=f"Recipe with ID {recipe_id} not found"
         )
     
     # Check if rating already exists
@@ -56,11 +62,17 @@ async def create_rating(
         review=rating_data.review
     )
     
-    db.add(new_rating)
-    db.commit()
-    db.refresh(new_rating)
-    
-    return new_rating
+    try:
+        db.add(new_rating)
+        db.commit()
+        db.refresh(new_rating)
+        return new_rating
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save rating: {str(e)}"
+        )
 
 
 @router.get("/{recipe_id}/ratings", response_model=List[RatingResponse])

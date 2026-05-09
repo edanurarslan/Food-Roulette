@@ -174,11 +174,8 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
   // LEVEL 4: Arama Filtresi
   const matchesSearch = (recipe: Recipe): boolean => {
     if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      recipe.name.toLowerCase().includes(query) ||
-      (recipe.ingredients?.some(ing => ing.toLowerCase().includes(query)) ?? false)
-    );
+    const query = searchQuery.toLowerCase().trim();
+    return recipe.name.toLowerCase().includes(query);
   };
 
   // Apply all 4 levels of filters
@@ -456,16 +453,17 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
               onPress={() => setShowAdvancedFilters(false)}
               activeOpacity={0.6}
             >
-              <Text style={styles.modalCloseButton}>← Geri</Text>
+              <Text style={styles.modalCloseIcon}>✕</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>🔍 Gelişmiş Filtreler</Text>
-            <View style={{ width: 50 }} />
+            <Text style={styles.modalTitle}>Filtreler</Text>
+            <View style={{ width: 24 }} />
           </LinearGradient>
 
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             {/* LEVEL 1: Ingredients Filter */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>🥘 Malzeme Seçin (Level 1)</Text>
+              <Text style={styles.filterSectionTitle}>🥘 Evde Hangi Malzemeler Var?</Text>
+              <Text style={styles.filterSectionSubtitle}>Seçtiğiniz malzemeleri içeren tarifler listelenir.</Text>
               <View style={styles.ingredientGrid}>
                 {getIngredientsFromRecipes().map((ingredient) => (
                   <TouchableOpacity
@@ -489,7 +487,7 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
                         selectedIngredients.includes(ingredient) && styles.ingredientChipTextActive,
                       ]}
                     >
-                      {ingredient}
+                      {selectedIngredients.includes(ingredient) ? '✓ ' : ''}{ingredient}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -498,7 +496,8 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
 
             {/* LEVEL 3: Mood Filter */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>😋 Mood Seçin (Level 3)</Text>
+              <Text style={styles.filterSectionTitle}>😋 Bugün Nasıl Hissediyorsun?</Text>
+              <Text style={styles.filterSectionSubtitle}>Ruh haline veya zamanına uygun tarifleri bul.</Text>
               <View style={styles.moodGrid}>
                 {moodOptions.map((mood) => (
                   <TouchableOpacity
@@ -524,7 +523,11 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Reset Filters Button */}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+
+          {/* Fixed Footer with Actions */}
+          <View style={styles.modalFooter}>
             <TouchableOpacity
               style={styles.resetButton}
               onPress={() => {
@@ -533,9 +536,24 @@ export const RecipesScreen: React.FC<Props> = ({ navigation }) => {
               }}
               activeOpacity={0.6}
             >
-              <Text style={styles.resetButtonText}>🔄 Filtreleri Temizle</Text>
+              <Text style={styles.resetButtonText}>Temizle</Text>
             </TouchableOpacity>
-          </ScrollView>
+            
+            <TouchableOpacity
+              style={styles.applyFilterButton}
+              onPress={() => setShowAdvancedFilters(false)}
+              activeOpacity={0.6}
+            >
+              <LinearGradient
+                colors={['#10B981', '#059669']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.applyFilterGradient}
+              >
+                <Text style={styles.applyFilterText}>Filtrele ({filteredRecipes.length} Sonuç)</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </Animated.View>
@@ -841,8 +859,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
   },
-  modalCloseButton: {
-    fontSize: 16,
+  modalCloseIcon: {
+    fontSize: 22,
     fontWeight: '700',
     color: '#FFF',
   },
@@ -860,32 +878,37 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   filterSectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: '#1F2937',
-    marginBottom: 10,
+    marginBottom: 4,
+  },
+  filterSectionSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 12,
   },
   ingredientGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   ingredientChip: {
     backgroundColor: '#F3F4F6',
-    borderRadius: 7,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
   ingredientChipActive: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#059669',
     borderColor: '#059669',
   },
   ingredientChipText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#4B5563',
   },
   ingredientChipTextActive: {
     color: '#FFF',
@@ -921,16 +944,40 @@ const styles = StyleSheet.create({
   moodLabelActive: {
     color: '#10B981',
   },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingBottom: 30,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFF',
+    gap: 12,
+  },
   resetButton: {
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    paddingVertical: 12,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    marginVertical: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   resetButtonText: {
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  applyFilterButton: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  applyFilterGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyFilterText: {
+    fontSize: 16,
     fontWeight: '700',
     color: '#FFF',
   },

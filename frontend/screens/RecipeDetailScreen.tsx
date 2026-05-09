@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from '../services/api';
+import { CookingTimer } from '../components/CookingTimer';
 import {
   scheduleCookingTimerNotification,
   cancelCookingTimerNotification,
@@ -79,11 +80,6 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   const [userRating, setUserRating] = useState<number | null>(null);
   const [completedStepIndices, setCompletedStepIndices] = useState<Set<number>>(new Set());
-  const [timerMinutesInput, setTimerMinutesInput] = useState('');
-  const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const endTimeRef = useRef<number | null>(null);
-  const timerFinishedRef = useRef(false);
 
   const recipeKey = String(recipeId);
 
@@ -125,90 +121,6 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   };
 
-  const finishTimerFlow = useCallback(async () => {
-    if (timerFinishedRef.current) return;
-    timerFinishedRef.current = true;
-    setIsTimerRunning(false);
-    endTimeRef.current = null;
-    await cancelCookingTimerNotification(recipeKey);
-    Alert.alert('Süre doldu!', `"${recipe.name}" için zamanlayıcı bitti.`);
-  }, [recipe.name, recipeKey]);
-
-  useEffect(() => {
-    loadLocalRatingAndSteps();
-  }, [loadLocalRatingAndSteps]);
-
-  useEffect(() => {
-    if (!loading && recipe?.cookTime) {
-      const mins = recipe.cookTime || 20;
-      if (!isTimerRunning) {
-        setRemainingSeconds(mins * 60);
-        setTimerMinutesInput(String(mins));
-      }
-    }
-  }, [recipe.id, recipe.cookTime, loading, isTimerRunning]);
-
-  useEffect(() => {
-    if (!isTimerRunning) {
-      timerFinishedRef.current = false;
-      return;
-    }
-    const id = setInterval(() => {
-      if (!endTimeRef.current || timerFinishedRef.current) return;
-      const left = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
-      setRemainingSeconds(left);
-      if (left <= 0) {
-        void finishTimerFlow();
-      }
-    }, 400);
-    return () => clearInterval(id);
-  }, [isTimerRunning, finishTimerFlow]);
-
-  const formatTime = (totalSec: number) => {
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const startTimer = async () => {
-    let sec = remainingSeconds;
-    if (sec <= 0) {
-      const parsed = parseInt(timerMinutesInput || `${recipe.cookTime || 20}`, 10);
-      const mins = Number.isFinite(parsed) && parsed > 0 ? parsed : recipe.cookTime || 20;
-      sec = mins * 60;
-      setRemainingSeconds(sec);
-    }
-    timerFinishedRef.current = false;
-    endTimeRef.current = Date.now() + sec * 1000;
-    setIsTimerRunning(true);
-    if (Platform.OS !== 'web') {
-      const perm = await requestNotificationPermissions();
-      if (perm !== 'granted') {
-        alertNotificationDenied();
-      }
-      await scheduleCookingTimerNotification(sec, recipe.name, recipeKey);
-    }
-  };
-
-  const pauseTimer = async () => {
-    if (endTimeRef.current) {
-      const left = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
-      setRemainingSeconds(left);
-    }
-    endTimeRef.current = null;
-    setIsTimerRunning(false);
-    await cancelCookingTimerNotification(recipeKey);
-  };
-
-  const resetTimer = async () => {
-    endTimeRef.current = null;
-    setIsTimerRunning(false);
-    const mins = recipe.cookTime || 20;
-    setRemainingSeconds(mins * 60);
-    setTimerMinutesInput(String(mins));
-    await cancelCookingTimerNotification(recipeKey);
-  };
-
   const toggleStepDone = (index: number) => {
     setCompletedStepIndices((prev) => {
       const next = new Set(prev);
@@ -220,15 +132,25 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const onSelectRating = async (stars: number) => {
+    console.log(`⭐ Rating seçildi: ${stars} yıldız`);
     setUserRating(stars);
     await persistRating(stars);
     const idNum = parseInt(recipeKey, 10);
     if (!Number.isNaN(idNum)) {
       try {
-        // Backend create endpoint mevcut puanı günceller (upsert).
-        await apiService.createRating(idNum, stars);
-      } catch {
-        // offline veya giriş yok — sadece local
+        console.log(`📤 Backend'e rating gönderiliyor: recipeId=${idNum}, rating=${stars}`);
+        const result = await apiService.createRating(idNum, stars);
+        console.log(`✅ Rating başarıyla kaydedildi:`, result);
+      } catch (error: any) {
+        console.error(`❌ Rating kaydı başarısız:`, {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+        });
+        Alert.alert(
+          'Puanlama Hatası',
+          `Puanlama kaydedilemedi: ${error.message || 'Lütfen tekrar deneyin'}`
+        );
       }
     }
   };
@@ -244,13 +166,6 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       duration: 600,
       useNativeDriver: true,
     }).start();
-  }, [recipeId]);
-
-  useEffect(() => {
-    setIsTimerRunning(false);
-    endTimeRef.current = null;
-    timerFinishedRef.current = false;
-    void cancelCookingTimerNotification(String(recipeId));
   }, [recipeId]);
 
   const trackHistory = async (recipeId: number) => {
@@ -547,8 +462,6 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   }
 
-  const timerProgress = Math.max(0, Math.min(1, remainingSeconds / (recipe.cookTime || 20) / 60));
-
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -643,41 +556,17 @@ export const RecipeDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           })}
         </View>
 
-        {/* --- ESTETİK DAİRESEL ZAMANLAYICI --- */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>⏱️ Pişirme Zamanlayıcısı</Text>
-          <View style={styles.clockContainer}>
-            <View style={styles.clockOuterRing}>
-              <View style={[styles.clockProgress, { height: `${timerProgress * 100}%` }]} />
-              <View style={styles.clockInnerCircle}>
-                <Text style={styles.timerDisplay}>{formatTime(remainingSeconds)}</Text>
-                <View style={styles.timerInputWrapper}>
-                  <TextInput
-                    style={styles.timerInputMinimal}
-                    keyboardType="number-pad"
-                    editable={!isTimerRunning}
-                    value={timerMinutesInput}
-                    onChangeText={setTimerMinutesInput}
-                    placeholder="00"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                  <Text style={styles.minLabel}>dk</Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.timerControlRow}>
-              <TouchableOpacity 
-                style={[styles.timerCircleBtn, isTimerRunning ? styles.pauseBtn : styles.startBtn]} 
-                onPress={isTimerRunning ? pauseTimer : startTimer}
-              >
-                <Text style={styles.timerBtnIcon}>{isTimerRunning ? '⏸' : '▶'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.timerCircleBtnSecondary} onPress={resetTimer}>
-                <Text style={styles.timerBtnIconSmall}>🔄</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        {/* --- GELİŞMİŞ PIŞIRME ZAMANLAYICISI --- */}
+        <CookingTimer
+          recipeName={recipe.name}
+          defaultMinutes={recipe.cookTime || 20}
+          onNotification={async (message) => {
+            Alert.alert('⏰ Bildirim', message);
+          }}
+          onTimerEnd={() => {
+            console.log(`🎉 Zamanlayıcı bitti: ${recipe.name}`);
+          }}
+        />
 
         {/* Instructions Section — interactive checklist */}
         <View style={styles.section}>

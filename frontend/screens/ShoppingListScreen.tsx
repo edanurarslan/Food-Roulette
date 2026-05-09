@@ -79,7 +79,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
           // Ignore
         }
       };
-      
+
       cleanupOldData();
       loadShoppingList();
       Animated.timing(fadeAnim, {
@@ -94,11 +94,11 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
     try {
       setLoading(true);
       console.log('📥 Backend\'ten alışveriş listesi yükleniyor...');
-      
+
       // Try to load from backend first
       const items = await apiService.getShoppingItems();
       console.log('📡 Backend response:', items);
-      
+
       // Transform backend response to match frontend interface
       const transformed = items.map((item: any) => {
         const category = (item.category || 'Diğer').trim(); // Ensure no whitespace
@@ -112,17 +112,17 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
           createdAt: new Date(item.created_at).getTime(),
         };
       });
-      
+
       console.log('✅ Backend transformed:', transformed.map(i => `${i.name} (${i.category})`));
       setShoppingList(transformed);
-      
+
       // Also sync to AsyncStorage
       await AsyncStorage.setItem('shoppingList', JSON.stringify(transformed));
       console.log(`✅ ${transformed.length} malzeme backend'den yüklendi:`, transformed.map(i => `${i.name} (${i.category})`));
     } catch (error) {
       console.warn('⚠️  Backend yüklenirken hata:', error);
       console.warn('📦 AsyncStorage fallback\'e geçiliyor...');
-      
+
       // Fallback to AsyncStorage
       try {
         const data = await AsyncStorage.getItem('shoppingList');
@@ -162,7 +162,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
     console.log(`🔄 useEffect triggered`);
     console.log(`   selectedCategories: ${Array.from(selectedCategories).join(', ')}`);
     console.log(`   shoppingList.length: ${shoppingList.length}`);
-    
+
     let filtered = [...shoppingList];
 
     // Eğer "Tümü" seçiliyse tümünü göster
@@ -170,7 +170,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
       console.log(`   ✅ Tümü seçili: ${filtered.length} item`);
     } else if (selectedCategories.size > 0) {
       const beforeCount = filtered.length;
-      
+
       filtered = filtered.filter(item => {
         const itemCatNormalized = (item.category || '').trim();
         const isMatched = Array.from(selectedCategories).some(selectedCat => {
@@ -178,7 +178,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
         });
         return isMatched;
       });
-      
+
       const selectedList = Array.from(selectedCategories).join(', ');
       console.log(`   ✅ Filtreleme uygulandı: [${selectedList}] → ${beforeCount} → ${filtered.length} item`);
     } else {
@@ -242,12 +242,12 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
   const toggleItem = (id: string) => {
     const item = shoppingList.find(i => i.id === id);
     if (!item) return;
-    
+
     // Update backend
     apiService.updateShoppingItem(parseInt(id), { is_checked: !item.isChecked }).catch((error) => {
       console.warn('Backend güncellenirken hata:', error);
     });
-    
+
     const updated = shoppingList.map(i =>
       i.id === id ? { ...i, isChecked: !i.isChecked } : i
     );
@@ -261,7 +261,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
     apiService.deleteShoppingItem(parseInt(id)).catch((error) => {
       console.warn('Backend silinirken hata:', error);
     });
-    
+
     // Remove from list immediately (no confirmation)
     const updated = shoppingList.filter(item => item.id !== id);
     setShoppingList(updated);
@@ -270,28 +270,41 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const clearCheckedItems = () => {
-    Alert.alert(
-      'İşaretli Öğeleri Sil',
-      'Satın alınan tüm öğeler silinecek. Emin misiniz?',
-      [
-        { text: 'İptal', onPress: () => {} },
-        {
-          text: 'Sil',
-          onPress: () => {
-            // Clear checked items in backend
-            apiService.clearCheckedShoppingItems().catch((error) => {
-              console.warn('Backend temizlenirken hata:', error);
-            });
-            
-            const updated = shoppingList.filter(item => !item.isChecked);
-            setShoppingList(updated);
-            saveShoppingList(updated);
-            Alert.alert('Başarılı', 'İşaretli öğeler silindi');
+    const performDelete = () => {
+      // Clear checked items in backend
+      apiService.clearCheckedShoppingItems().catch((error) => {
+        console.warn('Backend temizlenirken hata:', error);
+      });
+
+      const updated = shoppingList.filter(item => !item.isChecked);
+      setShoppingList(updated);
+      saveShoppingList(updated);
+
+      if (Platform.OS === 'web') {
+        window.alert('İşaretli öğeler silindi');
+      } else {
+        Alert.alert('Başarılı', 'İşaretli öğeler silindi');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Satın alınan tüm öğeler silinecek. Emin misiniz?')) {
+        performDelete();
+      }
+    } else {
+      Alert.alert(
+        'İşaretli Öğeleri Sil',
+        'Satın alınan tüm öğeler silinecek. Emin misiniz?',
+        [
+          { text: 'İptal', onPress: () => { } },
+          {
+            text: 'Sil',
+            onPress: performDelete,
+            style: 'destructive',
           },
-          style: 'destructive',
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const renderItem = ({ item }: { item: ShoppingItem }) => (
@@ -408,7 +421,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
                   key={category}
                   onPress={() => {
                     const newCategories = new Set(selectedCategories);
-                    
+
                     if (category === 'Tümü') {
                       // Tümü seçilince diğer seçimleri temizle
                       newCategories.clear();
@@ -417,7 +430,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
                     } else {
                       // Tümü seçili ise kaldır
                       newCategories.delete('Tümü');
-                      
+
                       if (newCategories.has(category)) {
                         // Zaten seçili ise kaldır
                         newCategories.delete(category);
@@ -427,14 +440,14 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
                         newCategories.add(category);
                         console.log(`📌 "${category}" seçildi`);
                       }
-                      
+
                       // Eğer hiç kategori seçili değilse Tümü'nü ekle
                       if (newCategories.size === 0) {
                         newCategories.add('Tümü');
                         console.log(`📌 Hiç kategori seçilmedi - "Tümü" etkin hale getirildi`);
                       }
                     }
-                    
+
                     setSelectedCategories(newCategories);
                   }}
                   style={[
@@ -559,7 +572,7 @@ export const ShoppingListScreen: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.submitButtonText}>✓ Ekle</Text>
                 </LinearGradient>
               </TouchableOpacity>
-              
+
               <View style={{ height: 10 }} />
             </View>
           )}
@@ -891,24 +904,23 @@ const styles = StyleSheet.create({
   unitSelectContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
   },
   unitButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#FFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginRight: 8,
+    borderColor: '#BFDBFE',
   },
   unitButtonActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
   },
   unitButtonText: {
-    fontSize: 11,
-    color: '#6B7280',
+    fontSize: 12,
+    color: '#2563EB',
     fontWeight: '600',
   },
   unitButtonTextActive: {
@@ -917,16 +929,15 @@ const styles = StyleSheet.create({
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   categoryButton: {
-    flex: 0.48,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: '#FFF',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#F0FDF4',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#BBF7D0',
     alignItems: 'center',
   },
   categoryButtonActive: {
@@ -934,8 +945,8 @@ const styles = StyleSheet.create({
     borderColor: '#10B981',
   },
   categoryButtonText: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 13,
+    color: '#059669',
     fontWeight: '600',
   },
   categoryButtonTextActive: {

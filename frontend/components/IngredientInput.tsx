@@ -22,9 +22,20 @@ export const IngredientInput: React.FC<IngredientInputProps> = ({
   const [input, setInput] = useState('');
 
   const handleAdd = () => {
-    if (input.trim() && ingredients.length < 6) {
-      onAddIngredient(input.trim());
-      setInput('');
+    const trimmed = input.trim().toLowerCase();
+    if (trimmed && ingredients.length < 6) {
+      // Aynı malzeme iki kez eklenmesini önle
+      if (!ingredients.some(ing => ing.toLowerCase() === trimmed)) {
+        onAddIngredient(trimmed);
+        setInput('');
+        console.log(`✅ Malzeme eklendi: ${trimmed}`);
+      } else {
+        console.log(`⚠️ ${trimmed} zaten ekli`);
+      }
+    } else if (!trimmed) {
+      console.log(`⚠️ Boş malzeme eklenemez`);
+    } else {
+      console.log(`⚠️ Maksimum 6 malzeme eklenebilir`);
     }
   };
 
@@ -45,7 +56,9 @@ export const IngredientInput: React.FC<IngredientInputProps> = ({
           onChangeText={setInput}
           placeholder="Malzeme ekle..."
           placeholderTextColor="#9CA3AF"
-          maxLength={20}
+          maxLength={30}
+          onSubmitEditing={handleAdd}
+          returnKeyType="done"
         />
         <TouchableOpacity
           onPress={handleAdd}
