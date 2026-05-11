@@ -11,3 +11,5 @@ hafta 5 video: https://youtu.be/ygVyitZqM_w
 hafta 6 video: https://youtu.be/fHHAUhnozgk
 
 hafta 7 video: https://youtu.be/A6dj3eWilqo
+
+hafta 8 video: https://youtu.be/gacCRKmhssk
